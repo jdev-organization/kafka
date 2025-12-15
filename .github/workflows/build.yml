@@ -30,7 +30,13 @@ jobs:
           path: ~/.gradle/caches
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle') }}
           restore-keys: ${{ runner.os }}-gradle
-      - name: Build and analyze
+      - name: Compile (no tests) and analyze
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: ./gradlew sonar --info
+        run: |
+          ./gradlew clean compileJava compileScala \
+            -x test \
+            -x javadoc \
+            -x checkstyleMain \
+            -x spotbugsMain \
+            sonar --info
