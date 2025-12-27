@@ -138,43 +138,77 @@ public class KRaftMetadataCache implements MetadataCache {
             List<Integer> filteredIsr = maybeFilterAliveReplicas(image, partition.isr, listenerName, errorUnavailableEndpoints);
             List<Integer> offlineReplicas = getOfflineReplicas(image, partition, listenerName);
             Optional<Node> maybeLeader = getAliveEndpoint(image, partition.leader, listenerName);
-            Errors error;
-            if (maybeLeader.isEmpty()) {
-                if (!image.cluster().brokers().containsKey(partition.leader)) {
-                    log.debug("Error while fetching metadata for {}-{}: leader not available", topicName, partitionId);
-                    error = Errors.LEADER_NOT_AVAILABLE;
-                } else {
-                    log.debug("Error while fetching metadata for {}-{}: listener {} not found on leader {}", topicName, partitionId, listenerName, partition.leader);
-                    error = errorUnavailableListeners ? Errors.LISTENER_NOT_FOUND : Errors.LEADER_NOT_AVAILABLE;
-                }
-                return new MetadataResponsePartition()
-                    .setErrorCode(error.code())
-                    .setPartitionIndex(partitionId)
-                    .setLeaderId(MetadataResponse.NO_LEADER_ID)
-                    .setLeaderEpoch(partition.leaderEpoch)
-                    .setReplicaNodes(filteredReplicas)
-                    .setIsrNodes(filteredIsr)
-                    .setOfflineReplicas(offlineReplicas);
-            } else {
-                if (filteredReplicas.size() < partition.replicas.length) {
-                    log.debug("Error while fetching metadata for {}-{}: replica information not available for following brokers {}", topicName, partitionId, Arrays.stream(partition.replicas).filter(b -> !filteredReplicas.contains(b)).mapToObj(String::valueOf).collect(Collectors.joining(",")));
-                    error = Errors.REPLICA_NOT_AVAILABLE;
-                } else if (filteredIsr.size() < partition.isr.length) {
-                    log.debug("Error while fetching metadata for {}-{}: in sync replica information not available for following brokers {}", topicName, partitionId, Arrays.stream(partition.isr).filter(b -> !filteredIsr.contains(b)).mapToObj(String::valueOf).collect(Collectors.joining(",")));
-                    error = Errors.REPLICA_NOT_AVAILABLE;
-                } else {
-                    error = Errors.NONE;
-                }
-                return new MetadataResponsePartition()
-                    .setErrorCode(error.code())
-                    .setPartitionIndex(partitionId)
-                    .setLeaderId(maybeLeader.get().id())
-                    .setLeaderEpoch(partition.leaderEpoch)
-                    .setReplicaNodes(filteredReplicas)
-                    .setIsrNodes(filteredIsr)
-                    .setOfflineReplicas(offlineReplicas);
-            }
+            return buildPartitionMetadataResponse(
+                image, topicName, partitionId, partition, maybeLeader,
+                filteredReplicas, filteredIsr, offlineReplicas, errorUnavailableListeners, listenerName
+            );
         }).toList();
+    }
+
+    private MetadataResponsePartition buildPartitionMetadataResponse(
+        MetadataImage image,
+        String topicName,
+        int partitionId,
+        PartitionRegistration partition,
+        Optional<Node> maybeLeader,
+        List<Integer> filteredReplicas,
+        List<Integer> filteredIsr,
+        List<Integer> offlineReplicas,
+        boolean errorUnavailableListeners,
+        ListenerName listenerName
+    ) {
+        Errors error;
+        int leaderId;
+        if (maybeLeader.isEmpty()) {
+            error = getLeaderNotAvailableError(image, topicName, partitionId, partition, listenerName, errorUnavailableListeners);
+            leaderId = MetadataResponse.NO_LEADER_ID;
+        } else {
+            error = getLeaderAvailableError(topicName, partitionId, partition, filteredReplicas, filteredIsr);
+            leaderId = maybeLeader.get().id();
+        }
+        return new MetadataResponsePartition()
+            .setErrorCode(error.code())
+            .setPartitionIndex(partitionId)
+            .setLeaderId(leaderId)
+            .setLeaderEpoch(partition.leaderEpoch)
+            .setReplicaNodes(filteredReplicas)
+            .setIsrNodes(filteredIsr)
+            .setOfflineReplicas(offlineReplicas);
+    }
+
+    private Errors getLeaderNotAvailableError(
+        MetadataImage image,
+        String topicName,
+        int partitionId,
+        PartitionRegistration partition,
+        ListenerName listenerName,
+        boolean errorUnavailableListeners
+    ) {
+        if (!image.cluster().brokers().containsKey(partition.leader)) {
+            log.debug("Error while fetching metadata for {}-{}: leader not available", topicName, partitionId);
+            return Errors.LEADER_NOT_AVAILABLE;
+        } else {
+            log.debug("Error while fetching metadata for {}-{}: listener {} not found on leader {}", topicName, partitionId, listenerName, partition.leader);
+            return errorUnavailableListeners ? Errors.LISTENER_NOT_FOUND : Errors.LEADER_NOT_AVAILABLE;
+        }
+    }
+
+    private Errors getLeaderAvailableError(
+        String topicName,
+        int partitionId,
+        PartitionRegistration partition,
+        List<Integer> filteredReplicas,
+        List<Integer> filteredIsr
+    ) {
+        if (filteredReplicas.size() < partition.replicas.length) {
+            log.debug("Error while fetching metadata for {}-{}: replica information not available for following brokers {}", topicName, partitionId, Arrays.stream(partition.replicas).filter(b -> !filteredReplicas.contains(b)).mapToObj(String::valueOf).collect(Collectors.joining(",")));
+            return Errors.REPLICA_NOT_AVAILABLE;
+        } else if (filteredIsr.size() < partition.isr.length) {
+            log.debug("Error while fetching metadata for {}-{}: in sync replica information not available for following brokers {}", topicName, partitionId, Arrays.stream(partition.isr).filter(b -> !filteredIsr.contains(b)).mapToObj(String::valueOf).collect(Collectors.joining(",")));
+            return Errors.REPLICA_NOT_AVAILABLE;
+        } else {
+            return Errors.NONE;
+        }
     }
 
     /**
