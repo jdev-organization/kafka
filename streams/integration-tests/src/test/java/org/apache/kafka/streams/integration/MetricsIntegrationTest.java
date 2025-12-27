@@ -71,7 +71,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 @Timeout(600)
 @Tag("integration")
-public class MetricsIntegrationTest {
+class MetricsIntegrationTest {
     private static final int NUM_BROKERS = 1;
     private static final int NUM_THREADS = 2;
 
