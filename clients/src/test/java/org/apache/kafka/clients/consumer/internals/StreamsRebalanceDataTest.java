@@ -254,9 +254,11 @@ public class StreamsRebalanceDataTest {
             UnsupportedOperationException.class,
             () -> subtopology.repartitionSinkTopics().add("repartitionSinkTopic2")
         );
+        Map<String, StreamsRebalanceData.TopicInfo> repartitionSourceTopics = subtopology.repartitionSourceTopics();
+        StreamsRebalanceData.TopicInfo topicInfo = new StreamsRebalanceData.TopicInfo(Optional.of(1), Optional.of((short) 1), Map.of());
         assertThrows(
             UnsupportedOperationException.class,
-            () -> subtopology.repartitionSourceTopics().put("repartitionSourceTopic2", new StreamsRebalanceData.TopicInfo(Optional.of(1), Optional.of((short) 1), Map.of()))
+            () -> repartitionSourceTopics.put("repartitionSourceTopic2", topicInfo)
         );
         assertThrows(
             UnsupportedOperationException.class,
