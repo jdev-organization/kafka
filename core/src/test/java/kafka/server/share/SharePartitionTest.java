@@ -12198,7 +12198,7 @@ public class SharePartitionTest {
         return acquiredRecordsList;
     }
 
-    public void mockPersisterReadStateMethod(Persister persister) {
+    void mockPersisterReadStateMethod(Persister persister) {
         ReadShareGroupStateResult readShareGroupStateResult = Mockito.mock(ReadShareGroupStateResult.class);
         Mockito.when(readShareGroupStateResult.topicsData()).thenReturn(List.of(
                 new TopicData<>(TOPIC_ID_PARTITION.topicId(), List.of(
