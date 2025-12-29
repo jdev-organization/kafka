@@ -288,38 +288,9 @@ public class KRaftMetadataCache implements MetadataCache {
         while (topics.hasNext()) {
             String topicName = topics.next();
             if (remaining.get() > 0) {
-                var partitionResponseEntry = partitionMetadataForDescribeTopicResponse(image, topicName, listenerName, topicPartitionStartIndex.apply(topicName), remaining.get());
-                var partitionResponse = partitionResponseEntry.getKey();
-                int nextPartition = partitionResponseEntry.getValue();
-                if (partitionResponse.isPresent()) {
-                    List<DescribeTopicPartitionsResponsePartition> partitions = partitionResponse.get();
-                    DescribeTopicPartitionsResponseTopic response = new DescribeTopicPartitionsResponseTopic()
-                        .setErrorCode(Errors.NONE.code())
-                        .setName(topicName)
-                        .setTopicId(Optional.ofNullable(image.topics().getTopic(topicName).id()).orElse(Uuid.ZERO_UUID))
-                        .setIsInternal(Topic.isInternal(topicName))
-                        .setPartitions(partitions);
-                    result.topics().add(response);
-
-                    if (nextPartition != -1) {
-                        result.setNextCursor(new Cursor().setTopicName(topicName).setPartitionIndex(nextPartition));
-                        break;
-                    } else {
-                        remaining.addAndGet(-partitions.size());
-                    }
-                } else if (!ignoreTopicsWithExceptions) {
-                    Errors error;
-                    try {
-                        Topic.validate(topicName);
-                        error = Errors.UNKNOWN_TOPIC_OR_PARTITION;
-                    } catch (InvalidTopicException e) {
-                        error = Errors.INVALID_TOPIC_EXCEPTION;
-                    }
-                    result.topics().add(new DescribeTopicPartitionsResponseTopic()
-                        .setErrorCode(error.code())
-                        .setName(topicName)
-                        .setTopicId(getTopicId(topicName))
-                        .setIsInternal(Topic.isInternal(topicName)));
+                if (!processTopicPartitionResponse(image, topicName, listenerName, topicPartitionStartIndex, 
+                                                   remaining, result, ignoreTopicsWithExceptions)) {
+                    break;
                 }
             } else if (remaining.get() == 0) {
                 // The cursor should point to the beginning of the current topic. All the partitions in the previous topic
@@ -330,6 +301,82 @@ public class KRaftMetadataCache implements MetadataCache {
             }
         }
         return result;
+    }
+
+    /**
+     * Process the partition response for a topic and add it to the result.
+     * 
+     * @return true if processing should continue, false if should break
+     */
+    private boolean processTopicPartitionResponse(
+        MetadataImage image,
+        String topicName,
+        ListenerName listenerName,
+        Function<String, Integer> topicPartitionStartIndex,
+        AtomicInteger remaining,
+        DescribeTopicPartitionsResponseData result,
+        boolean ignoreTopicsWithExceptions
+    ) {
+        var partitionResponseEntry = partitionMetadataForDescribeTopicResponse(
+            image, topicName, listenerName, topicPartitionStartIndex.apply(topicName), remaining.get());
+        var partitionResponse = partitionResponseEntry.getKey();
+        int nextPartition = partitionResponseEntry.getValue();
+        
+        if (partitionResponse.isPresent()) {
+            return handleValidPartitionResponse(image, topicName, partitionResponse.get(), 
+                                               nextPartition, remaining, result);
+        } else if (!ignoreTopicsWithExceptions) {
+            addErrorTopicResponse(topicName, result);
+        }
+        return true;
+    }
+
+    /**
+     * Handle a valid partition response by adding it to the result.
+     * 
+     * @return true if processing should continue, false if should break
+     */
+    private boolean handleValidPartitionResponse(
+        MetadataImage image,
+        String topicName,
+        List<DescribeTopicPartitionsResponsePartition> partitions,
+        int nextPartition,
+        AtomicInteger remaining,
+        DescribeTopicPartitionsResponseData result
+    ) {
+        DescribeTopicPartitionsResponseTopic response = new DescribeTopicPartitionsResponseTopic()
+            .setErrorCode(Errors.NONE.code())
+            .setName(topicName)
+            .setTopicId(Optional.ofNullable(image.topics().getTopic(topicName).id()).orElse(Uuid.ZERO_UUID))
+            .setIsInternal(Topic.isInternal(topicName))
+            .setPartitions(partitions);
+        result.topics().add(response);
+
+        if (nextPartition != -1) {
+            result.setNextCursor(new Cursor().setTopicName(topicName).setPartitionIndex(nextPartition));
+            return false;
+        } else {
+            remaining.addAndGet(-partitions.size());
+            return true;
+        }
+    }
+
+    /**
+     * Add an error topic response for a topic that doesn't exist or is invalid.
+     */
+    private void addErrorTopicResponse(String topicName, DescribeTopicPartitionsResponseData result) {
+        Errors error;
+        try {
+            Topic.validate(topicName);
+            error = Errors.UNKNOWN_TOPIC_OR_PARTITION;
+        } catch (InvalidTopicException e) {
+            error = Errors.INVALID_TOPIC_EXCEPTION;
+        }
+        result.topics().add(new DescribeTopicPartitionsResponseTopic()
+            .setErrorCode(error.code())
+            .setName(topicName)
+            .setTopicId(getTopicId(topicName))
+            .setIsInternal(Topic.isInternal(topicName)));
     }
 
     @Override
