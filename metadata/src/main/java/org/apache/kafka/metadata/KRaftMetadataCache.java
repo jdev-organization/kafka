@@ -285,7 +285,8 @@ public class KRaftMetadataCache implements MetadataCache {
         MetadataImage image = currentImage;
         AtomicInteger remaining = new AtomicInteger(maximumNumberOfPartitions);
         DescribeTopicPartitionsResponseData result = new DescribeTopicPartitionsResponseData();
-        while (topics.hasNext()) {
+        boolean shouldContinue = true;
+        while (topics.hasNext() && shouldContinue) {
             String topicName = topics.next();
             if (remaining.get() > 0) {
                 var partitionResponseEntry = partitionMetadataForDescribeTopicResponse(image, topicName, listenerName, topicPartitionStartIndex.apply(topicName), remaining.get());
@@ -303,7 +304,7 @@ public class KRaftMetadataCache implements MetadataCache {
 
                     if (nextPartition != -1) {
                         result.setNextCursor(new Cursor().setTopicName(topicName).setPartitionIndex(nextPartition));
-                        break;
+                        shouldContinue = false;
                     } else {
                         remaining.addAndGet(-partitions.size());
                     }
@@ -326,7 +327,7 @@ public class KRaftMetadataCache implements MetadataCache {
                 // should be fulfilled. Note that, if a partition is pointed in the NextTopicPartition, it does not mean
                 // this topic exists.
                 result.setNextCursor(new Cursor().setTopicName(topicName).setPartitionIndex(0));
-                break;
+                shouldContinue = false;
             }
         }
         return result;
