@@ -116,7 +116,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 @SuppressWarnings("resource")
-public class SharePartitionTest {
+class SharePartitionTest {
 
     private static final String ACQUISITION_LOCK_NEVER_GOT_RELEASED = "Acquisition lock never got released.";
     private static final String GROUP_ID = "test-group";
