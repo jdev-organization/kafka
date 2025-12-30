@@ -78,12 +78,12 @@ public class MetricsIntegrationTest {
     public static final EmbeddedKafkaCluster CLUSTER = new EmbeddedKafkaCluster(NUM_BROKERS);
 
     @BeforeAll
-    public static void startCluster() throws IOException {
+    static void startCluster() throws IOException {
         CLUSTER.start();
     }
 
     @AfterAll
-    public static void closeCluster() {
+    static void closeCluster() {
         CLUSTER.stop();
     }
 
@@ -248,7 +248,7 @@ public class MetricsIntegrationTest {
     private String appId;
 
     @BeforeEach
-    public void before(final TestInfo testInfo) throws InterruptedException {
+    void before(final TestInfo testInfo) throws InterruptedException {
         builder = new StreamsBuilder();
         CLUSTER.createTopics(STREAM_INPUT, STREAM_OUTPUT_1, STREAM_OUTPUT_2, STREAM_OUTPUT_3, STREAM_OUTPUT_4);
 
@@ -266,7 +266,7 @@ public class MetricsIntegrationTest {
     }
 
     @AfterEach
-    public void after() throws InterruptedException {
+    void after() throws InterruptedException {
         CLUSTER.deleteTopics(STREAM_INPUT, STREAM_OUTPUT_1, STREAM_OUTPUT_2, STREAM_OUTPUT_3, STREAM_OUTPUT_4);
     }
 
@@ -344,7 +344,7 @@ public class MetricsIntegrationTest {
 
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
-    public void shouldAddMetricsOnAllLevels(final boolean streamsProtocolEnabled) throws Exception {
+    void shouldAddMetricsOnAllLevels(final boolean streamsProtocolEnabled) throws Exception {
         if (streamsProtocolEnabled) {
             streamsConfiguration.put(StreamsConfig.GROUP_PROTOCOL_CONFIG, GroupProtocol.STREAMS.name().toLowerCase(Locale.getDefault()));
         }
@@ -383,7 +383,7 @@ public class MetricsIntegrationTest {
 
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
-    public void shouldAddMetricsForWindowStoreAndSuppressionBuffer(final boolean streamsProtocolEnabled) throws Exception {
+    void shouldAddMetricsForWindowStoreAndSuppressionBuffer(final boolean streamsProtocolEnabled) throws Exception {
         if (streamsProtocolEnabled) {
             streamsConfiguration.put(StreamsConfig.GROUP_PROTOCOL_CONFIG, GroupProtocol.STREAMS.name().toLowerCase(Locale.getDefault()));
         }
@@ -416,7 +416,7 @@ public class MetricsIntegrationTest {
 
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
-    public void shouldAddMetricsForSessionStore(final boolean streamsProtocolEnabled) throws Exception {
+    void shouldAddMetricsForSessionStore(final boolean streamsProtocolEnabled) throws Exception {
         if (streamsProtocolEnabled) {
             streamsConfiguration.put(StreamsConfig.GROUP_PROTOCOL_CONFIG, GroupProtocol.STREAMS.name().toLowerCase(Locale.getDefault()));
         }
