@@ -112,11 +112,12 @@ public class StreamsRebalanceDataTest {
 
     @Test
     public void assignmentShouldNotAcceptNulls() {
-        final Exception exception1 = assertThrows(NullPointerException.class, () -> new StreamsRebalanceData.Assignment(null, Set.of(), Set.of(), true));
+        final Set<StreamsRebalanceData.TaskId> emptySet = Set.of();
+        final Exception exception1 = assertThrows(NullPointerException.class, () -> new StreamsRebalanceData.Assignment(null, emptySet, emptySet, true));
         assertEquals("Active tasks cannot be null", exception1.getMessage());
-        final Exception exception2 = assertThrows(NullPointerException.class, () -> new StreamsRebalanceData.Assignment(Set.of(), null, Set.of(), true));
+        final Exception exception2 = assertThrows(NullPointerException.class, () -> new StreamsRebalanceData.Assignment(emptySet, null, emptySet, true));
         assertEquals("Standby tasks cannot be null", exception2.getMessage());
-        final Exception exception3 = assertThrows(NullPointerException.class, () -> new StreamsRebalanceData.Assignment(Set.of(), Set.of(), null, true));
+        final Exception exception3 = assertThrows(NullPointerException.class, () -> new StreamsRebalanceData.Assignment(emptySet, emptySet, null, true));
         assertEquals("Warmup tasks cannot be null", exception3.getMessage());
     }
 
