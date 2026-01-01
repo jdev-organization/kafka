@@ -205,29 +205,49 @@ public class StreamsRebalanceDataTest {
 
     @Test
     public void subtopologyShouldNotAcceptNulls() {
+        final Set<String> emptySet = Set.of();
+        final Map<String, StreamsRebalanceData.TopicInfo> emptyMap1 = Map.of();
+        final Map<String, StreamsRebalanceData.TopicInfo> emptyMap2 = Map.of();
+        final List<Set<String>> emptyList = List.of();
         final Exception exception1 = assertThrows(
             NullPointerException.class,
-            () -> new StreamsRebalanceData.Subtopology(null, Set.of(), Map.of(), Map.of(), List.of())
+            () -> new StreamsRebalanceData.Subtopology(null, emptySet, emptyMap1, emptyMap2, emptyList)
         );
         assertEquals("Subtopology ID cannot be null", exception1.getMessage());
+        final Set<String> emptySet2 = Set.of();
+        final Map<String, StreamsRebalanceData.TopicInfo> emptyMap3 = Map.of();
+        final Map<String, StreamsRebalanceData.TopicInfo> emptyMap4 = Map.of();
+        final List<Set<String>> emptyList2 = List.of();
         final Exception exception2 = assertThrows(
             NullPointerException.class,
-            () -> new StreamsRebalanceData.Subtopology(Set.of(), null, Map.of(), Map.of(), List.of())
+            () -> new StreamsRebalanceData.Subtopology(emptySet2, null, emptyMap3, emptyMap4, emptyList2)
         );
         assertEquals("Repartition sink topics cannot be null", exception2.getMessage());
+        final Set<String> emptySet3 = Set.of();
+        final Set<String> emptySet4 = Set.of();
+        final Map<String, StreamsRebalanceData.TopicInfo> emptyMap5 = Map.of();
+        final List<Set<String>> emptyList3 = List.of();
         final Exception exception3 = assertThrows(
             NullPointerException.class,
-            () -> new StreamsRebalanceData.Subtopology(Set.of(), Set.of(), null, Map.of(), List.of())
+            () -> new StreamsRebalanceData.Subtopology(emptySet3, emptySet4, null, emptyMap5, emptyList3)
         );
         assertEquals("Repartition source topics cannot be null", exception3.getMessage());
+        final Set<String> emptySet5 = Set.of();
+        final Set<String> emptySet6 = Set.of();
+        final Map<String, StreamsRebalanceData.TopicInfo> emptyMap6 = Map.of();
+        final List<Set<String>> emptyList4 = List.of();
         final Exception exception4 = assertThrows(
             NullPointerException.class,
-            () -> new StreamsRebalanceData.Subtopology(Set.of(), Set.of(), Map.of(), null, List.of())
+            () -> new StreamsRebalanceData.Subtopology(emptySet5, emptySet6, emptyMap6, null, emptyList4)
         );
         assertEquals("State changelog topics cannot be null", exception4.getMessage());
+        final Set<String> emptySet7 = Set.of();
+        final Set<String> emptySet8 = Set.of();
+        final Map<String, StreamsRebalanceData.TopicInfo> emptyMap7 = Map.of();
+        final Map<String, StreamsRebalanceData.TopicInfo> emptyMap8 = Map.of();
         final Exception exception5 = assertThrows(
             NullPointerException.class,
-            () -> new StreamsRebalanceData.Subtopology(Set.of(), Set.of(), Map.of(), Map.of(), null)
+            () -> new StreamsRebalanceData.Subtopology(emptySet7, emptySet8, emptyMap7, emptyMap8, null)
         );
         assertEquals("Co-partition groups cannot be null", exception5.getMessage());
     }
