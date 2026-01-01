@@ -339,12 +339,13 @@ public class StreamsRebalanceDataTest {
         final UUID processId = UUID.randomUUID();
         final Map<String, StreamsRebalanceData.Subtopology> subtopologies = new HashMap<>();
         final Map<String, String> clientTags = Map.of("clientTag1", "clientTagValue1");
+        final Optional<StreamsRebalanceData.HostInfo> nullEndpoint = null;
 
         final Exception exception = assertThrows(
             NullPointerException.class,
             () -> new StreamsRebalanceData(
                 processId,
-                null,
+                nullEndpoint,
                 subtopologies,
                 clientTags
             )
