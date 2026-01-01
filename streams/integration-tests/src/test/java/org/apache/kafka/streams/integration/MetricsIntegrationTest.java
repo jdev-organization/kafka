@@ -383,7 +383,7 @@ public class MetricsIntegrationTest {
 
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
-    public void shouldAddMetricsForWindowStoreAndSuppressionBuffer(final boolean streamsProtocolEnabled) throws Exception {
+    void shouldAddMetricsForWindowStoreAndSuppressionBuffer(final boolean streamsProtocolEnabled) throws Exception {
         if (streamsProtocolEnabled) {
             streamsConfiguration.put(StreamsConfig.GROUP_PROTOCOL_CONFIG, GroupProtocol.STREAMS.name().toLowerCase(Locale.getDefault()));
         }
