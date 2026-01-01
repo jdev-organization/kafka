@@ -59,6 +59,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
+import java.util.function.ToIntFunction;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -278,7 +279,7 @@ public class KRaftMetadataCache implements MetadataCache {
     public DescribeTopicPartitionsResponseData describeTopicResponse(
         Iterator<String> topics,
         ListenerName listenerName,
-        Function<String, Integer> topicPartitionStartIndex,
+        ToIntFunction<String> topicPartitionStartIndex,
         int maximumNumberOfPartitions,
         boolean ignoreTopicsWithExceptions
     ) {
@@ -288,7 +289,7 @@ public class KRaftMetadataCache implements MetadataCache {
         while (topics.hasNext()) {
             String topicName = topics.next();
             if (remaining.get() > 0) {
-                var partitionResponseEntry = partitionMetadataForDescribeTopicResponse(image, topicName, listenerName, topicPartitionStartIndex.apply(topicName), remaining.get());
+                var partitionResponseEntry = partitionMetadataForDescribeTopicResponse(image, topicName, listenerName, topicPartitionStartIndex.applyAsInt(topicName), remaining.get());
                 var partitionResponse = partitionResponseEntry.getKey();
                 int nextPartition = partitionResponseEntry.getValue();
                 if (partitionResponse.isPresent()) {
