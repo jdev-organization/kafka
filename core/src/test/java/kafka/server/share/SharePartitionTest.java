@@ -10722,7 +10722,7 @@ public class SharePartitionTest {
      * offsets from 15 offset and should not create any other entries in the cache.
      */
     @Test
-    public void testAcquireBatchInRecordLimitModeWithMovedStartOffset() {
+    void testAcquireBatchInRecordLimitModeWithMovedStartOffset() {
         Persister persister = Mockito.mock(Persister.class);
         ReadShareGroupStateResult readShareGroupStateResult = Mockito.mock(ReadShareGroupStateResult.class);
         Mockito.when(readShareGroupStateResult.topicsData()).thenReturn(List.of(
