@@ -177,6 +177,9 @@ public class StreamsResetter {
         } catch (Throwable e) {
             System.err.println("ERROR: " + e);
             e.printStackTrace(System.err);
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
             return EXIT_CODE_ERROR;
         }
     }
