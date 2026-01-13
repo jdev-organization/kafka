@@ -213,7 +213,7 @@ public class StreamsResetter {
                 }
                 // if a member is unknown, it may mean that it left the group itself. Retrying to confirm.
                 if (ee.getCause() instanceof KafkaException ke && ke.getCause() instanceof UnknownMemberIdException) {
-                    if (retries++ < MAX_REMOVE_MEMBERS_FROM_CONSUMER_GROUP_RETRIES) {
+                    if (++retries <= MAX_REMOVE_MEMBERS_FROM_CONSUMER_GROUP_RETRIES) {
                         continue;
                     }
                 }
