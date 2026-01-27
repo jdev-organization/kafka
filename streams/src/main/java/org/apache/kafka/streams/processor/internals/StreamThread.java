@@ -1159,139 +1159,214 @@ public class StreamThread extends Thread implements ProcessingThread {
         final long startMs = time.milliseconds();
         now = startMs;
 
-        final long pollLatency;
-        taskManager.resumePollingForPartitionsWithAvailableSpace();
-        pollLatency = pollPhase();
-        totalPolledSinceLastSummary += 1;
-
-        if (streamsRebalanceData.isPresent()) {
-            // Always handle status codes (e.g., MISSING_SOURCE_TOPICS, INCORRECTLY_PARTITIONED_TOPICS)
-            // regardless of streamsGroupReady, as these may throw exceptions that need to be handled.
-            handleStreamsRebalanceData();
-
-            if (!streamsGroupReady) {
-                return;
-            }
-        }
-
-        // Shutdown hook could potentially be triggered and transit the thread state to PENDING_SHUTDOWN during #pollRequests().
-        // The task manager internal states could be uninitialized if the state transition happens during #onPartitionsAssigned().
-        // Should only proceed when the thread is still running after #pollRequests(), because no external state mutation
-        // could affect the task manager state beyond this point within #runOnce().
-        if (!isRunning()) {
-            log.debug("Thread state is already {}, skipping the run once call after poll request", state);
+        final long pollLatency = executePollPhase();
+        
+        if (!shouldContinueAfterPollPhase()) {
             return;
         }
 
-        // TODO: we should record the restore latency and its relative time spent ratio after
-        //       we figure out how to move this method out of the stream thread
         advanceNowAndComputeLatency();
 
+        final ProcessingResult result = processTasksIfNeeded();
+        
+        recordSensorsAndMaybeLogSummary(startMs, pollLatency, result);
+    }
+
+    private long executePollPhase() {
+        taskManager.resumePollingForPartitionsWithAvailableSpace();
+        final long pollLatency = pollPhase();
+        totalPolledSinceLastSummary += 1;
+        return pollLatency;
+    }
+
+    private boolean shouldContinueAfterPollPhase() {
+        if (streamsRebalanceData.isPresent()) {
+            handleStreamsRebalanceData();
+            if (!streamsGroupReady) {
+                return false;
+            }
+        }
+
+        if (!isRunning()) {
+            log.debug("Thread state is already {}, skipping the run once call after poll request", state);
+            return false;
+        }
+
+        return true;
+    }
+
+    private ProcessingResult processTasksIfNeeded() {
+        final ProcessingResult result = new ProcessingResult();
+        
+        if (!isStartingRunningOrPartitionAssigned()) {
+            return result;
+        }
+
+        taskManager.updateLags();
+        processTasksInBatch(result);
+        taskManager.recordTaskProcessRatio(result.totalProcessLatency, now);
+        
+        return result;
+    }
+
+    private void processTasksInBatch(final ProcessingResult result) {
+        /*
+         * Within an iteration, after processing up to N (N initialized as 1 upon start up) records for each applicable tasks, check the current time:
+         *  1. If it is time to punctuate, do it;
+         *  2. If it is time to commit, do it, this should be after 1) since punctuate may trigger commit;
+         *  3. If there's no records processed, end the current iteration immediately;
+         *  4. If we are close to consumer's next poll deadline, end the current iteration immediately;
+         *  5. If any of 1), 2) and 4) happens, half N for next iteration;
+         *  6. Otherwise, increment N.
+         */
+        do {
+            checkStateUpdater();
+
+            final int processed = processRecords(result);
+            final int punctuated = executePunctuators(result);
+            final int committed = executeCommit(result);
+
+            if (shouldBreakProcessingLoop(processed, punctuated, committed)) {
+                break;
+            }
+        } while (true);
+    }
+
+    private int processRecords(final ProcessingResult result) {
+        log.debug("Processing tasks with {} iterations.", numIterations);
+        final int processed = taskManager.process(numIterations, time);
+        final long processLatency = advanceNowAndComputeLatency();
+        result.totalProcessLatency += processLatency;
+        
+        if (processed > 0) {
+            recordProcessMetrics(processed, processLatency);
+            result.totalProcessed += processed;
+            totalRecordsProcessedSinceLastSummary += processed;
+        }
+        
+        log.debug("Processed {} records with {} iterations; invoking punctuators if necessary",
+                  processed, numIterations);
+        
+        return processed;
+    }
+
+    private void recordProcessMetrics(final int processed, final long processLatency) {
+        processRateSensor.record(processed, now);
+        processLatencySensor.record(processLatency / (double) processed, now);
+    }
+
+    private int executePunctuators(final ProcessingResult result) {
+        final int punctuated = taskManager.punctuate();
+        totalPunctuatorsSinceLastSummary += punctuated;
+        final long punctuateLatency = advanceNowAndComputeLatency();
+        result.totalPunctuateLatency += punctuateLatency;
+        
+        if (punctuated > 0) {
+            punctuateSensor.record(punctuateLatency / (double) punctuated, now);
+        }
+        
+        log.debug("{} punctuators ran.", punctuated);
+        return punctuated;
+    }
+
+    private int executeCommit(final ProcessingResult result) {
+        final long beforeCommitMs = now;
+        final int committed = maybeCommit();
+        final long commitLatency = Math.max(now - beforeCommitMs, 0);
+        result.totalCommitLatency += commitLatency;
+        
+        if (committed > 0) {
+            recordCommitMetrics(committed, commitLatency);
+        }
+        
+        return committed;
+    }
+
+    private void recordCommitMetrics(final int committed, final long commitLatency) {
+        totalCommittedSinceLastSummary += committed;
+        commitSensor.record(commitLatency / (double) committed, now);
+
+        if (log.isDebugEnabled()) {
+            log.debug("Committed all active tasks {} and standby tasks {} in {}ms",
+                taskManager.activeRunningTaskIds(), taskManager.standbyTaskIds(), commitLatency);
+        }
+    }
+
+    private boolean shouldBreakProcessingLoop(final int processed, final int punctuated, final int committed) {
+        if (processed == 0) {
+            return true;
+        }
+        
+        if (isCloseToPollDeadline()) {
+            adjustIterationsDown();
+            return true;
+        }
+        
+        if (punctuated > 0 || committed > 0) {
+            adjustIterationsDown();
+        } else {
+            numIterations++;
+        }
+        
+        return false;
+    }
+
+    private boolean isCloseToPollDeadline() {
+        return Math.max(now - lastPollMs, 0) > maxPollTimeMs / 2;
+    }
+
+    private void adjustIterationsDown() {
+        numIterations = numIterations > 1 ? numIterations / 2 : numIterations;
+    }
+
+    private void recordSensorsAndMaybeLogSummary(final long startMs, final long pollLatency, final ProcessingResult result) {
+        now = time.milliseconds();
+        final long runOnceLatency = now - startMs;
+        
+        recordLatencySensors(runOnceLatency, pollLatency, result);
+        maybeLogProcessingSummary();
+    }
+
+    private void recordLatencySensors(final long runOnceLatency, final long pollLatency, final ProcessingResult result) {
+        processRecordsSensor.record(result.totalProcessed, now);
+        processRatioSensor.record((double) result.totalProcessLatency / runOnceLatency, now);
+        punctuateRatioSensor.record((double) result.totalPunctuateLatency / runOnceLatency, now);
+        pollRatioSensor.record((double) pollLatency / runOnceLatency, now);
+        commitRatioSensor.record((double) result.totalCommitLatency / runOnceLatency, now);
+    }
+
+    private void maybeLogProcessingSummary() {
+        final long timeSinceLastLog = now - lastLogSummaryMs;
+        
+        if (shouldLogSummary(timeSinceLastLog)) {
+            logProcessingSummary(timeSinceLastLog);
+            resetSummaryCounters();
+        }
+    }
+
+    private boolean shouldLogSummary(final long timeSinceLastLog) {
+        return logSummaryIntervalMs > 0 && timeSinceLastLog > logSummaryIntervalMs;
+    }
+
+    private void logProcessingSummary(final long timeSinceLastLog) {
+        log.info("Processed {} total records, ran {} punctuators, polled {} times and committed {} total tasks since the last update {}ms ago",
+             totalRecordsProcessedSinceLastSummary, totalPunctuatorsSinceLastSummary, 
+             totalPolledSinceLastSummary, totalCommittedSinceLastSummary, timeSinceLastLog);
+    }
+
+    private void resetSummaryCounters() {
+        totalRecordsProcessedSinceLastSummary = 0L;
+        totalPunctuatorsSinceLastSummary = 0L;
+        totalPolledSinceLastSummary = 0L;
+        totalCommittedSinceLastSummary = 0L;
+        lastLogSummaryMs = now;
+    }
+
+    private static class ProcessingResult {
         int totalProcessed = 0;
         long totalCommitLatency = 0L;
         long totalProcessLatency = 0L;
         long totalPunctuateLatency = 0L;
-        if (isStartingRunningOrPartitionAssigned()) {
-
-            taskManager.updateLags();
-
-            /*
-             * Within an iteration, after processing up to N (N initialized as 1 upon start up) records for each applicable tasks, check the current time:
-             *  1. If it is time to punctuate, do it;
-             *  2. If it is time to commit, do it, this should be after 1) since punctuate may trigger commit;
-             *  3. If there's no records processed, end the current iteration immediately;
-             *  4. If we are close to consumer's next poll deadline, end the current iteration immediately;
-             *  5. If any of 1), 2) and 4) happens, half N for next iteration;
-             *  6. Otherwise, increment N.
-             */
-            do {
-
-                checkStateUpdater();
-
-                log.debug("Processing tasks with {} iterations.", numIterations);
-                final int processed = taskManager.process(numIterations, time);
-                final long processLatency = advanceNowAndComputeLatency();
-                totalProcessLatency += processLatency;
-                if (processed > 0) {
-                    // It makes no difference to the outcome of these metrics when we record "0",
-                    // so we can just avoid the method call when we didn't process anything.
-                    processRateSensor.record(processed, now);
-
-                    // This metric is scaled to represent the _average_ processing time of _each_
-                    // task. Note, it's hard to interpret this as defined; the per-task process-ratio
-                    // as well as total time ratio spent on processing compared with polling / committing etc
-                    // are reported on other metrics.
-                    processLatencySensor.record(processLatency / (double) processed, now);
-
-                    totalProcessed += processed;
-                    totalRecordsProcessedSinceLastSummary += processed;
-                }
-
-                log.debug("Processed {} records with {} iterations; invoking punctuators if necessary",
-                          processed,
-                          numIterations);
-
-                final int punctuated = taskManager.punctuate();
-                totalPunctuatorsSinceLastSummary += punctuated;
-                final long punctuateLatency = advanceNowAndComputeLatency();
-                totalPunctuateLatency += punctuateLatency;
-                if (punctuated > 0) {
-                    punctuateSensor.record(punctuateLatency / (double) punctuated, now);
-                }
-
-                log.debug("{} punctuators ran.", punctuated);
-
-                final long beforeCommitMs = now;
-                final int committed = maybeCommit();
-                final long commitLatency = Math.max(now - beforeCommitMs, 0);
-                totalCommitLatency += commitLatency;
-                if (committed > 0) {
-                    totalCommittedSinceLastSummary += committed;
-                    commitSensor.record(commitLatency / (double) committed, now);
-
-                    if (log.isDebugEnabled()) {
-                        log.debug("Committed all active tasks {} and standby tasks {} in {}ms",
-                            taskManager.activeRunningTaskIds(), taskManager.standbyTaskIds(), commitLatency);
-                    }
-                }
-
-                if (processed == 0) {
-                    // if there are no records to be processed, exit after punctuate / commit
-                    break;
-                } else if (Math.max(now - lastPollMs, 0) > maxPollTimeMs / 2) {
-                    numIterations = numIterations > 1 ? numIterations / 2 : numIterations;
-                    break;
-                } else if (punctuated > 0 || committed > 0) {
-                    numIterations = numIterations > 1 ? numIterations / 2 : numIterations;
-                } else {
-                    numIterations++;
-                }
-            } while (true);
-
-            // we record the ratio out of the while loop so that the accumulated latency spans over
-            // multiple iterations with reasonably large max.num.records and hence is less vulnerable to outliers
-            taskManager.recordTaskProcessRatio(totalProcessLatency, now);
-        }
-
-        now = time.milliseconds();
-        final long runOnceLatency = now - startMs;
-        processRecordsSensor.record(totalProcessed, now);
-        processRatioSensor.record((double) totalProcessLatency / runOnceLatency, now);
-        punctuateRatioSensor.record((double) totalPunctuateLatency / runOnceLatency, now);
-        pollRatioSensor.record((double) pollLatency / runOnceLatency, now);
-        commitRatioSensor.record((double) totalCommitLatency / runOnceLatency, now);
-
-        final long timeSinceLastLog = now - lastLogSummaryMs;
-        if (logSummaryIntervalMs > 0 && timeSinceLastLog > logSummaryIntervalMs) {
-            log.info("Processed {} total records, ran {} punctuators, polled {} times and committed {} total tasks since the last update {}ms ago",
-                 totalRecordsProcessedSinceLastSummary, totalPunctuatorsSinceLastSummary, totalPolledSinceLastSummary, totalCommittedSinceLastSummary, timeSinceLastLog);
-
-            totalRecordsProcessedSinceLastSummary = 0L;
-            totalPunctuatorsSinceLastSummary = 0L;
-            totalPolledSinceLastSummary = 0L;
-            totalCommittedSinceLastSummary = 0L;
-            lastLogSummaryMs = now;
-        }
     }
 
     /**
