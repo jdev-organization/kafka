@@ -3284,66 +3284,125 @@ public class GroupMetadataManager {
         // Check whether the member has changed its subscribed regex.
         boolean subscribedTopicRegexChanged = !Objects.equals(oldSubscribedTopicRegex, newSubscribedTopicRegex);
         if (subscribedTopicRegexChanged) {
-            log.debug("[GroupId {}] Member {} updated its subscribed regex to: {}.",
-                groupId, memberId, newSubscribedTopicRegex);
+            updateRegularExpressionStatus = handleSubscribedTopicRegexChange(
+                groupId, memberId, group, updatedMember, 
+                oldSubscribedTopicRegex, newSubscribedTopicRegex, records
+            );
+            requireRefresh = shouldRefreshForNewRegex(group, newSubscribedTopicRegex);
+        }
 
-            updateRegularExpressionStatus = UpdateRegularExpressionStatus.REGEX_UPDATED;
+        // Check if we should schedule a refresh for the regular expressions
+        if (shouldScheduleRegexRefresh(group, requireRefresh)) {
+            Map<String, Integer> subscribedRegularExpressions = computeSubscribedRegularExpressions(
+                group, oldSubscribedTopicRegex, newSubscribedTopicRegex
+            );
+            
+            boolean needsRefresh = determineIfRefreshNeeded(
+                group, subscribedRegularExpressions, currentTimeMs
+            );
 
-            if (isNotEmpty(oldSubscribedTopicRegex) && group.numSubscribedMembers(oldSubscribedTopicRegex) == 1) {
-                // If the member was the last one subscribed to the regex, we delete the
-                // resolved regular expression.
-                records.add(newConsumerGroupRegularExpressionTombstone(
-                    groupId,
-                    oldSubscribedTopicRegex
-                ));
-            }
-
-            if (isNotEmpty(newSubscribedTopicRegex)) {
-                if (group.numSubscribedMembers(newSubscribedTopicRegex) == 0) {
-                    // If the member subscribed to a new regex, we compile it to ensure its validity.
-                    // We also trigger a refresh of the regexes in order to resolve it.
-                    throwIfRegularExpressionIsInvalid(updatedMember.subscribedTopicRegex());
-                    requireRefresh = true;
-                } else {
-                    // If the new regex is already resolved, we trigger a rebalance
-                    // by bumping the group epoch.
-                    if (group.resolvedRegularExpression(newSubscribedTopicRegex).isPresent()) {
-                        updateRegularExpressionStatus = UpdateRegularExpressionStatus.REGEX_UPDATED_AND_RESOLVED;
-                    }
-                }
-            } else if (isNotEmpty(oldSubscribedTopicRegex)) {
-                updateRegularExpressionStatus = UpdateRegularExpressionStatus.REGEX_UPDATED_AND_RESOLVED;
+            if (needsRefresh) {
+                scheduleRegexResolution(context, group, memberId, subscribedRegularExpressions);
             }
         }
 
-        // Conditions to trigger a refresh:
-        // 0.   The group is subscribed to regular expressions.
-        // 1.   There is no ongoing refresh for the group.
-        // 2.   The last refresh is older than 10s.
-        // 3.1  The group has unresolved regular expressions.
-        // 3.2  Or the metadata image has new topics.
-        // 3.3  Or the last refresh is older than the batch refresh max interval.
+        return updateRegularExpressionStatus;
+    }
 
-        // 0. The group is subscribed to regular expressions. We also take the one
-        //    that the current may have just introduced.
+    /**
+     * Handle the change in subscribed topic regex for a member.
+     */
+    private UpdateRegularExpressionStatus handleSubscribedTopicRegexChange(
+        String groupId,
+        String memberId,
+        ConsumerGroup group,
+        ConsumerGroupMember updatedMember,
+        String oldSubscribedTopicRegex,
+        String newSubscribedTopicRegex,
+        List<CoordinatorRecord> records
+    ) {
+        log.debug("[GroupId {}] Member {} updated its subscribed regex to: {}.",
+            groupId, memberId, newSubscribedTopicRegex);
+
+        UpdateRegularExpressionStatus status = UpdateRegularExpressionStatus.REGEX_UPDATED;
+
+        if (isNotEmpty(oldSubscribedTopicRegex) && group.numSubscribedMembers(oldSubscribedTopicRegex) == 1) {
+            // If the member was the last one subscribed to the regex, we delete the
+            // resolved regular expression.
+            records.add(newConsumerGroupRegularExpressionTombstone(
+                groupId,
+                oldSubscribedTopicRegex
+            ));
+        }
+
+        if (isNotEmpty(newSubscribedTopicRegex)) {
+            status = handleNewSubscribedTopicRegex(group, updatedMember, newSubscribedTopicRegex);
+        } else if (isNotEmpty(oldSubscribedTopicRegex)) {
+            status = UpdateRegularExpressionStatus.REGEX_UPDATED_AND_RESOLVED;
+        }
+
+        return status;
+    }
+
+    /**
+     * Handle the case when a member subscribes to a new topic regex.
+     */
+    private UpdateRegularExpressionStatus handleNewSubscribedTopicRegex(
+        ConsumerGroup group,
+        ConsumerGroupMember updatedMember,
+        String newSubscribedTopicRegex
+    ) {
+        if (group.numSubscribedMembers(newSubscribedTopicRegex) == 0) {
+            // If the member subscribed to a new regex, we compile it to ensure its validity.
+            throwIfRegularExpressionIsInvalid(updatedMember.subscribedTopicRegex());
+            return UpdateRegularExpressionStatus.REGEX_UPDATED;
+        } else if (group.resolvedRegularExpression(newSubscribedTopicRegex).isPresent()) {
+            // If the new regex is already resolved, we trigger a rebalance by bumping the group epoch.
+            return UpdateRegularExpressionStatus.REGEX_UPDATED_AND_RESOLVED;
+        }
+        return UpdateRegularExpressionStatus.REGEX_UPDATED;
+    }
+
+    /**
+     * Determine if a refresh is needed for a new regex.
+     */
+    private boolean shouldRefreshForNewRegex(ConsumerGroup group, String newSubscribedTopicRegex) {
+        return isNotEmpty(newSubscribedTopicRegex) && group.numSubscribedMembers(newSubscribedTopicRegex) == 0;
+    }
+
+    /**
+     * Check if we should schedule a regex refresh.
+     */
+    private boolean shouldScheduleRegexRefresh(ConsumerGroup group, boolean requireRefresh) {
+        // 0. The group is subscribed to regular expressions.
         if (!requireRefresh && group.subscribedRegularExpressions().isEmpty()) {
-            return updateRegularExpressionStatus;
+            return false;
         }
 
         // 1. There is no ongoing refresh for the group.
         String key = group.groupId() + "-regex";
         if (executor.isScheduled(key)) {
-            return updateRegularExpressionStatus;
+            return false;
         }
 
-        // 2. The last refresh is older than 10s. If the group does not have any regular
-        //    expressions but the current member just brought a new one, we should continue.
+        // 2. The last refresh is older than 10s.
+        long currentTimeMs = time.milliseconds();
         long lastRefreshTimeMs = group.lastResolvedRegularExpressionRefreshTimeMs();
         if (currentTimeMs <= lastRefreshTimeMs + REGEX_BATCH_REFRESH_MIN_INTERVAL_MS) {
-            return updateRegularExpressionStatus;
+            return false;
         }
 
-        // 3.1 The group has unresolved regular expressions.
+        return true;
+    }
+
+    /**
+     * Compute the current subscribed regular expressions considering the member update.
+     */
+    private Map<String, Integer> computeSubscribedRegularExpressions(
+        ConsumerGroup group,
+        String oldSubscribedTopicRegex,
+        String newSubscribedTopicRegex
+    ) {
         Map<String, Integer> subscribedRegularExpressions = new HashMap<>(group.subscribedRegularExpressions());
         if (isNotEmpty(oldSubscribedTopicRegex)) {
             subscribedRegularExpressions.compute(oldSubscribedTopicRegex, Utils::decValue);
@@ -3351,25 +3410,47 @@ public class GroupMetadataManager {
         if (isNotEmpty(newSubscribedTopicRegex)) {
             subscribedRegularExpressions.compute(newSubscribedTopicRegex, Utils::incValue);
         }
+        return subscribedRegularExpressions;
+    }
 
-        requireRefresh |= subscribedRegularExpressions.size() != group.numResolvedRegularExpressions();
+    /**
+     * Determine if a refresh is needed based on various conditions.
+     */
+    private boolean determineIfRefreshNeeded(
+        ConsumerGroup group,
+        Map<String, Integer> subscribedRegularExpressions,
+        long currentTimeMs
+    ) {
+        // 3.1 The group has unresolved regular expressions.
+        boolean needsRefresh = subscribedRegularExpressions.size() != group.numResolvedRegularExpressions();
 
         // 3.2 The metadata has new topics that we must consider.
-        requireRefresh |= group.lastResolvedRegularExpressionVersion() < lastMetadataImageWithNewTopics;
+        needsRefresh |= group.lastResolvedRegularExpressionVersion() < lastMetadataImageWithNewTopics;
 
         // 3.3 The last refresh is older than the batch refresh max interval.
-        requireRefresh |= currentTimeMs > lastRefreshTimeMs + config.consumerGroupRegexRefreshIntervalMs();
+        long lastRefreshTimeMs = group.lastResolvedRegularExpressionRefreshTimeMs();
+        needsRefresh |= currentTimeMs > lastRefreshTimeMs + config.consumerGroupRegexRefreshIntervalMs();
 
-        if (requireRefresh && !subscribedRegularExpressions.isEmpty()) {
-            Set<String> regexes = Collections.unmodifiableSet(subscribedRegularExpressions.keySet());
-            executor.schedule(
-                key,
-                () -> topicRegexResolver.resolveRegularExpressions(context, groupId, log, metadataImage, regexes),
-                (result, exception) -> handleRegularExpressionsResult(groupId, memberId, result, exception)
-            );
-        }
+        return needsRefresh && !subscribedRegularExpressions.isEmpty();
+    }
 
-        return updateRegularExpressionStatus;
+    /**
+     * Schedule the resolution of regular expressions.
+     */
+    private void scheduleRegexResolution(
+        AuthorizableRequestContext context,
+        ConsumerGroup group,
+        String memberId,
+        Map<String, Integer> subscribedRegularExpressions
+    ) {
+        String groupId = group.groupId();
+        String key = groupId + "-regex";
+        Set<String> regexes = Collections.unmodifiableSet(subscribedRegularExpressions.keySet());
+        executor.schedule(
+            key,
+            () -> topicRegexResolver.resolveRegularExpressions(context, groupId, log, metadataImage, regexes),
+            (result, exception) -> handleRegularExpressionsResult(groupId, memberId, result, exception)
+        );
     }
 
     /**
