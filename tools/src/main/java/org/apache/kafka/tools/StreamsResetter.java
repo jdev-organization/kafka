@@ -194,32 +194,51 @@ public class StreamsResetter {
             try {
                 final List<MemberDescription> members =
                         new ArrayList<>(describeResult.describedGroups().get(groupId).get().members());
-                if (!members.isEmpty()) {
-                    if (force) {
-                        System.out.println("Force deleting all active members in the group: " + groupId);
-                        adminClient.removeMembersFromConsumerGroup(groupId, new RemoveMembersFromConsumerGroupOptions()).all().get();
-                    } else {
-                        throw new IllegalStateException("Consumer group '" + groupId + "' is still active "
-                                + "and has following members: " + members + ". "
-                                + "Make sure to stop all running application instances before running the reset tool."
-                                + " You can use option '--force' to remove active members from the group.");
-                    }
-                }
+                handleActiveMembers(groupId, adminClient, force, members);
                 break;
             } catch (ExecutionException ee) {
-                // If the group ID is not found, this is not an error case
-                if (ee.getCause() instanceof GroupIdNotFoundException) {
+                if (shouldBreakOnException(ee, retries)) {
                     break;
                 }
-                // if a member is unknown, it may mean that it left the group itself. Retrying to confirm.
-                if (ee.getCause() instanceof KafkaException ke && ke.getCause() instanceof UnknownMemberIdException) {
-                    if (retries++ < MAX_REMOVE_MEMBERS_FROM_CONSUMER_GROUP_RETRIES) {
-                        continue;
-                    }
+                if (shouldRetryOnUnknownMember(ee, retries)) {
+                    retries++;
+                    continue;
                 }
                 throw ee;
             }
         }
+    }
+
+    private void handleActiveMembers(final String groupId,
+                                      final Admin adminClient,
+                                      final boolean force,
+                                      final List<MemberDescription> members)
+        throws ExecutionException, InterruptedException {
+        if (members.isEmpty()) {
+            return;
+        }
+        if (force) {
+            System.out.println("Force deleting all active members in the group: " + groupId);
+            adminClient.removeMembersFromConsumerGroup(groupId, new RemoveMembersFromConsumerGroupOptions()).all().get();
+        } else {
+            throw new IllegalStateException("Consumer group '" + groupId + "' is still active "
+                    + "and has following members: " + members + ". "
+                    + "Make sure to stop all running application instances before running the reset tool."
+                    + " You can use option '--force' to remove active members from the group.");
+        }
+    }
+
+    private boolean shouldBreakOnException(final ExecutionException ee, final int retries) {
+        // If the group ID is not found, this is not an error case
+        return ee.getCause() instanceof GroupIdNotFoundException;
+    }
+
+    private boolean shouldRetryOnUnknownMember(final ExecutionException ee, final int retries) {
+        // if a member is unknown, it may mean that it left the group itself. Retrying to confirm.
+        if (ee.getCause() instanceof KafkaException ke && ke.getCause() instanceof UnknownMemberIdException) {
+            return retries < MAX_REMOVE_MEMBERS_FROM_CONSUMER_GROUP_RETRIES;
+        }
+        return false;
     }
 
     private int maybeResetInputAndSeekToEndIntermediateTopicOffsets(final Map<Object, Object> consumerConfig,
