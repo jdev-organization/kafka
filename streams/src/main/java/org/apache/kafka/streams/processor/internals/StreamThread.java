@@ -982,52 +982,67 @@ public class StreamThread extends Thread implements ProcessingThread {
         // to just trigger the "get instance id" background RPC;
         // we don't want to block the stream thread that can do useful work in the meantime
 
-        if (fetchDeadlineClientInstanceId != -1) {
-            if (!mainConsumerInstanceIdFuture.isDone()) {
-                if (fetchDeadlineClientInstanceId >= time.milliseconds()) {
-                    try {
-                        mainConsumerInstanceIdFuture.complete(mainConsumer.clientInstanceId(Duration.ZERO));
-                    } catch (final IllegalStateException disabledError) {
-                        // if telemetry is disabled on a client, we swallow the error,
-                        // to allow returning a partial result for all other clients
-                        mainConsumerInstanceIdFuture.complete(null);
-                    } catch (final TimeoutException swallow) {
-                        // swallow
-                    } catch (final Exception error) {
-                        mainConsumerInstanceIdFuture.completeExceptionally(error);
-                    }
-                } else {
-                    mainConsumerInstanceIdFuture.completeExceptionally(
-                        new TimeoutException("Could not retrieve main consumer client instance id.")
-                    );
-                }
-            }
+        if (fetchDeadlineClientInstanceId == -1) {
+            return;
+        }
 
-            if (!producerInstanceIdFuture.isDone()) {
-                if (fetchDeadlineClientInstanceId >= time.milliseconds()) {
-                    try {
-                        producerInstanceIdFuture.complete(
-                            taskManager.streamsProducer().kafkaProducer().clientInstanceId(Duration.ZERO)
-                        );
-                    } catch (final IllegalStateException disabledError) {
-                        // if telemetry is disabled on a client, we swallow the error,
-                        // to allow returning a partial result for all other clients
-                        producerInstanceIdFuture.complete(null);
-                    } catch (final TimeoutException swallow) {
-                        // swallow
-                    } catch (final Exception error) {
-                        producerInstanceIdFuture.completeExceptionally(error);
-                    }
-                } else {
-                    producerInstanceIdFuture.completeExceptionally(
-                        new TimeoutException("Could not retrieve thread producer client instance id.")
-                    );
-                }
-            }
+        maybeCompleteMainConsumerInstanceId();
+        maybeCompleteProducerInstanceId();
 
-            if (mainConsumerInstanceIdFuture.isDone() && producerInstanceIdFuture.isDone()) {
-                fetchDeadlineClientInstanceId = -1L;
-            }
+        if (mainConsumerInstanceIdFuture.isDone() && producerInstanceIdFuture.isDone()) {
+            fetchDeadlineClientInstanceId = -1L;
+        }
+    }
+
+    private void maybeCompleteMainConsumerInstanceId() {
+        if (mainConsumerInstanceIdFuture.isDone()) {
+            return;
+        }
+
+        if (fetchDeadlineClientInstanceId < time.milliseconds()) {
+            mainConsumerInstanceIdFuture.completeExceptionally(
+                new TimeoutException("Could not retrieve main consumer client instance id.")
+            );
+            return;
+        }
+
+        try {
+            mainConsumerInstanceIdFuture.complete(mainConsumer.clientInstanceId(Duration.ZERO));
+        } catch (final IllegalStateException disabledError) {
+            // if telemetry is disabled on a client, we swallow the error,
+            // to allow returning a partial result for all other clients
+            mainConsumerInstanceIdFuture.complete(null);
+        } catch (final TimeoutException swallow) {
+            // swallow
+        } catch (final Exception error) {
+            mainConsumerInstanceIdFuture.completeExceptionally(error);
+        }
+    }
+
+    private void maybeCompleteProducerInstanceId() {
+        if (producerInstanceIdFuture.isDone()) {
+            return;
+        }
+
+        if (fetchDeadlineClientInstanceId < time.milliseconds()) {
+            producerInstanceIdFuture.completeExceptionally(
+                new TimeoutException("Could not retrieve thread producer client instance id.")
+            );
+            return;
+        }
+
+        try {
+            producerInstanceIdFuture.complete(
+                taskManager.streamsProducer().kafkaProducer().clientInstanceId(Duration.ZERO)
+            );
+        } catch (final IllegalStateException disabledError) {
+            // if telemetry is disabled on a client, we swallow the error,
+            // to allow returning a partial result for all other clients
+            producerInstanceIdFuture.complete(null);
+        } catch (final TimeoutException swallow) {
+            // swallow
+        } catch (final Exception error) {
+            producerInstanceIdFuture.completeExceptionally(error);
         }
     }
 
