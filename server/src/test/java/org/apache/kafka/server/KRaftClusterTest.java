@@ -720,6 +720,7 @@ public class KRaftClusterTest {
 
         @Override
         public void removeQuota(ClientQuotaType quotaType, org.apache.kafka.server.quota.ClientQuotaEntity quotaEntity) {
+            // Intentionally empty - this is a dummy implementation for testing purposes
         }
 
         @Override
