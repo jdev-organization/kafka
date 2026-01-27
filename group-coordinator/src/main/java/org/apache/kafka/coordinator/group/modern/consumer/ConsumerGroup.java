@@ -1055,28 +1055,47 @@ public class ConsumerGroup extends ModernGroup<ConsumerGroupMember> {
     ) {
         assignment.forEach((topicId, assignedPartitions) -> {
             currentPartitionEpoch.compute(topicId, (__, partitionsOrNull) -> {
-                if (partitionsOrNull != null) {
-                    assignedPartitions.forEach(partitionId -> {
-                        Integer prevValue = partitionsOrNull.get(partitionId);
-                        if (prevValue != null && prevValue == expectedEpoch) {
-                            partitionsOrNull.remove(partitionId);
-                        } else {
-                            log.debug("[GroupId {}] Cannot remove the epoch {} from {}-{} because the partition is " +
-                                    "still owned at a different epoch {}", groupId, expectedEpoch, topicId, partitionId, prevValue);
-                        }
-                    });
-                    if (partitionsOrNull.isEmpty()) {
-                        return null;
-                    } else {
-                        return partitionsOrNull;
-                    }
-                } else {
-                    log.debug("[GroupId {}] Cannot remove the epoch {} from {} because it does not have any epoch",
-                            groupId, expectedEpoch, topicId);
-                    return partitionsOrNull;
-                }
+                return removePartitionEpochsForTopic(topicId, assignedPartitions, partitionsOrNull, expectedEpoch);
             });
         });
+    }
+
+    /**
+     * Helper method to remove partition epochs for a specific topic.
+     *
+     * @param topicId The topic ID.
+     * @param assignedPartitions The assigned partitions.
+     * @param partitionsOrNull The current partition epoch map.
+     * @param expectedEpoch The expected epoch.
+     * @return The updated partition epoch map or null if empty.
+     */
+    private Map<Integer, Integer> removePartitionEpochsForTopic(
+        Uuid topicId,
+        Set<Integer> assignedPartitions,
+        Map<Integer, Integer> partitionsOrNull,
+        int expectedEpoch
+    ) {
+        if (partitionsOrNull == null) {
+            log.debug("[GroupId {}] Cannot remove the epoch {} from {} because it does not have any epoch",
+                    groupId, expectedEpoch, topicId);
+            return null;
+        }
+
+        assignedPartitions.forEach(partitionId -> {
+            Integer prevValue = partitionsOrNull.get(partitionId);
+            if (prevValue != null && prevValue == expectedEpoch) {
+                partitionsOrNull.remove(partitionId);
+            } else {
+                log.debug("[GroupId {}] Cannot remove the epoch {} from {}-{} because the partition is " +
+                        "still owned at a different epoch {}", groupId, expectedEpoch, topicId, partitionId, prevValue);
+            }
+        });
+
+        if (partitionsOrNull.isEmpty()) {
+            return null;
+        } else {
+            return partitionsOrNull;
+        }
     }
 
     /**
