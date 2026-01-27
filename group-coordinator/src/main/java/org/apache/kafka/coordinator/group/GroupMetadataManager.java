@@ -2485,45 +2485,21 @@ public class GroupMetadataManager {
         throwIfConsumerGroupIsFull(group, memberId);
         throwIfClassicProtocolIsNotSupported(group, memberId, request.protocolType(), protocols);
 
-        if (JoinGroupRequest.requiresKnownMemberId(request, context.requestVersion())) {
-            // A dynamic member requiring a member id joins the group. Send back a response to call for another
-            // join group request with allocated member id.
-            responseFuture.complete(new JoinGroupResponseData()
-                .setMemberId(memberId)
-                .setErrorCode(Errors.MEMBER_ID_REQUIRED.code())
-            );
-            log.info("[GroupId {}] Dynamic member with unknown member id joins the consumer group. " +
-                "Created a new member id {} and requesting the member to rejoin with this id.", groupId, memberId);
+        if (handleMemberIdRequirement(request, context, responseFuture, groupId, memberId)) {
             return EMPTY_RESULT;
         }
 
         // Get or create the member.
-        final ConsumerGroupMember member;
-        if (instanceId == null) {
-            member = getOrMaybeSubscribeDynamicConsumerGroupMember(
-                group,
-                memberId,
-                -1,
-                List.of(),
-                true,
-                true
-            );
-        } else {
-            member = getOrMaybeSubscribeStaticConsumerGroupMember(
-                group,
-                memberId,
-                -1,
-                instanceId,
-                List.of(),
-                isUnknownMember,
-                true,
-                records
-            );
-        }
+        final ConsumerGroupMember member = getOrCreateMemberForJoin(
+            group,
+            memberId,
+            instanceId,
+            isUnknownMember,
+            records
+        );
 
         ConsumerGroupMember existingStaticMemberOrNull = group.staticMember(request.groupInstanceId());
-        boolean downgrade = existingStaticMemberOrNull != null &&
-            validateOnlineDowngradeWithReplacedMember(group, existingStaticMemberOrNull);
+        boolean downgrade = shouldDowngrade(group, existingStaticMemberOrNull);
 
         int groupEpoch = group.groupEpoch();
         SubscriptionType subscriptionType = group.subscriptionType();
@@ -2534,20 +2510,15 @@ public class GroupMetadataManager {
         // changed, the subscription metadata is updated and persisted by writing a ConsumerGroupPartitionMetadataValue
         // record to the __consumer_offsets partition. Finally, the group epoch is bumped if the subscriptions have
         // changed, and persisted by writing a ConsumerGroupMetadataValue record to the partition.
-        ConsumerGroupMember updatedMember = new ConsumerGroupMember.Builder(member)
-            .maybeUpdateInstanceId(Optional.ofNullable(instanceId))
-            .maybeUpdateRackId(Utils.toOptional(subscription.rackId()))
-            .maybeUpdateRebalanceTimeoutMs(ofSentinel(request.rebalanceTimeoutMs()))
-            .maybeUpdateServerAssignorName(Optional.empty())
-            .maybeUpdateSubscribedTopicNames(Optional.ofNullable(subscription.topics()))
-            .setSubscribedTopicRegex("") // Regex subscription is not supported for classic member.
-            .setClientId(context.clientId())
-            .setClientHost(context.clientAddress().toString())
-            .setClassicMemberMetadata(
-                new ConsumerGroupMemberMetadataValue.ClassicMemberMetadata()
-                    .setSessionTimeoutMs(sessionTimeoutMs)
-                    .setSupportedProtocols(ConsumerGroupMember.classicProtocolListFromJoinRequestProtocolCollection(protocols)))
-            .build();
+        ConsumerGroupMember updatedMember = buildUpdatedMemberForJoin(
+            member,
+            instanceId,
+            subscription,
+            context,
+            sessionTimeoutMs,
+            request.rebalanceTimeoutMs(),
+            protocols
+        );
 
         boolean hasMemberSubscriptionChanged = hasMemberSubscriptionChanged(
             groupId,
@@ -2585,76 +2556,259 @@ public class GroupMetadataManager {
         }
 
         if (downgrade) {
-            // 2. If the static member subscription hasn't changed, reconcile the member's assignment with the existing
-            // assignment if the member is not fully reconciled yet. If the static member subscription has changed, a
-            // rebalance will be triggered during downgrade anyway so we can skip the reconciliation.
-            if (!bumpGroupEpoch) {
-                updatedMember = maybeReconcile(
-                    groupId,
-                    updatedMember,
-                    group::currentPartitionEpoch,
-                    group.assignmentEpoch(),
-                    group.targetAssignment(updatedMember.memberId(), updatedMember.instanceId()),
-                    group.resolvedRegularExpressions(),
-                    bumpGroupEpoch,
-                    toTopicPartitions(subscription.ownedPartitions(), metadataImage),
-                    records
-                );
-            }
-
-            // 3. Downgrade the consumer group.
-            convertToClassicGroup(
+            updatedMember = handleDowngradeScenario(
                 group,
-                Set.of(),
+                groupId,
+                member,
                 updatedMember,
                 bumpGroupEpoch,
+                subscription,
                 records
             );
         } else {
-            // If no downgrade is triggered.
+            updatedMember = handleNoDowngradeScenario(
+                group,
+                groupId,
+                groupEpoch,
+                member,
+                updatedMember,
+                subscriptionType,
+                bumpGroupEpoch,
+                subscription,
+                records
+            );
+        }
 
-            // 2. Update the target assignment if the group epoch is larger than the target assignment epoch.
-            // The delta between the existing and the new target assignment is persisted to the partition.
-            final int targetAssignmentEpoch;
-            final Assignment targetAssignment;
+        final JoinGroupResponseData response = buildJoinGroupResponse(updatedMember);
 
-            if (groupEpoch > group.assignmentEpoch()) {
-                targetAssignment = updateTargetAssignment(
-                    group,
-                    groupEpoch,
-                    member,
-                    updatedMember,
-                    subscriptionType,
-                    records
-                );
-                targetAssignmentEpoch = groupEpoch;
-            } else {
-                targetAssignmentEpoch = group.assignmentEpoch();
-                targetAssignment = group.targetAssignment(updatedMember.memberId(), updatedMember.instanceId());
-            }
+        CompletableFuture<Void> appendFuture = new CompletableFuture<>();
+        setupAppendFutureCallback(
+            appendFuture,
+            groupId,
+            response,
+            sessionTimeoutMs,
+            request.rebalanceTimeoutMs(),
+            downgrade,
+            responseFuture
+        );
 
-            // 3. Reconcile the member's assignment with the target assignment if the member is not fully reconciled yet.
+        // If the joining member triggers a valid downgrade, the soft states will be directly
+        // updated in the conversion method, so the records don't need to be replayed.
+        // If the joining member doesn't trigger a valid downgrade, the group is still a
+        // consumer group. We still rely on replaying records to update the soft states.
+        return new CoordinatorResult<>(records, null, appendFuture, !downgrade);
+    }
+
+    /**
+     * Handles member ID requirement check for join group request.
+     * Returns true if MEMBER_ID_REQUIRED response was sent.
+     */
+    private boolean handleMemberIdRequirement(
+        JoinGroupRequestData request,
+        AuthorizableRequestContext context,
+        CompletableFuture<JoinGroupResponseData> responseFuture,
+        String groupId,
+        String memberId
+    ) {
+        if (JoinGroupRequest.requiresKnownMemberId(request, context.requestVersion())) {
+            // A dynamic member requiring a member id joins the group. Send back a response to call for another
+            // join group request with allocated member id.
+            responseFuture.complete(new JoinGroupResponseData()
+                .setMemberId(memberId)
+                .setErrorCode(Errors.MEMBER_ID_REQUIRED.code())
+            );
+            log.info("[GroupId {}] Dynamic member with unknown member id joins the consumer group. " +
+                "Created a new member id {} and requesting the member to rejoin with this id.", groupId, memberId);
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Gets or creates a member for join group request.
+     */
+    private ConsumerGroupMember getOrCreateMemberForJoin(
+        ConsumerGroup group,
+        String memberId,
+        String instanceId,
+        boolean isUnknownMember,
+        List<CoordinatorRecord> records
+    ) {
+        if (instanceId == null) {
+            return getOrMaybeSubscribeDynamicConsumerGroupMember(
+                group,
+                memberId,
+                -1,
+                List.of(),
+                true,
+                true
+            );
+        } else {
+            return getOrMaybeSubscribeStaticConsumerGroupMember(
+                group,
+                memberId,
+                -1,
+                instanceId,
+                List.of(),
+                isUnknownMember,
+                true,
+                records
+            );
+        }
+    }
+
+    /**
+     * Determines if downgrade should occur.
+     */
+    private boolean shouldDowngrade(
+        ConsumerGroup group,
+        ConsumerGroupMember existingStaticMemberOrNull
+    ) {
+        return existingStaticMemberOrNull != null &&
+            validateOnlineDowngradeWithReplacedMember(group, existingStaticMemberOrNull);
+    }
+
+    /**
+     * Builds an updated member for join group request.
+     */
+    private ConsumerGroupMember buildUpdatedMemberForJoin(
+        ConsumerGroupMember member,
+        String instanceId,
+        ConsumerProtocolSubscription subscription,
+        AuthorizableRequestContext context,
+        int sessionTimeoutMs,
+        int rebalanceTimeoutMs,
+        JoinGroupRequestProtocolCollection protocols
+    ) {
+        return new ConsumerGroupMember.Builder(member)
+            .maybeUpdateInstanceId(Optional.ofNullable(instanceId))
+            .maybeUpdateRackId(Utils.toOptional(subscription.rackId()))
+            .maybeUpdateRebalanceTimeoutMs(ofSentinel(rebalanceTimeoutMs))
+            .maybeUpdateServerAssignorName(Optional.empty())
+            .maybeUpdateSubscribedTopicNames(Optional.ofNullable(subscription.topics()))
+            .setSubscribedTopicRegex("") // Regex subscription is not supported for classic member.
+            .setClientId(context.clientId())
+            .setClientHost(context.clientAddress().toString())
+            .setClassicMemberMetadata(
+                new ConsumerGroupMemberMetadataValue.ClassicMemberMetadata()
+                    .setSessionTimeoutMs(sessionTimeoutMs)
+                    .setSupportedProtocols(ConsumerGroupMember.classicProtocolListFromJoinRequestProtocolCollection(protocols)))
+            .build();
+    }
+
+    /**
+     * Handles the downgrade scenario for join group.
+     */
+    private ConsumerGroupMember handleDowngradeScenario(
+        ConsumerGroup group,
+        String groupId,
+        ConsumerGroupMember member,
+        ConsumerGroupMember updatedMember,
+        boolean bumpGroupEpoch,
+        ConsumerProtocolSubscription subscription,
+        List<CoordinatorRecord> records
+    ) {
+        // 2. If the static member subscription hasn't changed, reconcile the member's assignment with the existing
+        // assignment if the member is not fully reconciled yet. If the static member subscription has changed, a
+        // rebalance will be triggered during downgrade anyway so we can skip the reconciliation.
+        if (!bumpGroupEpoch) {
             updatedMember = maybeReconcile(
                 groupId,
                 updatedMember,
                 group::currentPartitionEpoch,
-                targetAssignmentEpoch,
-                targetAssignment,
+                group.assignmentEpoch(),
+                group.targetAssignment(updatedMember.memberId(), updatedMember.instanceId()),
                 group.resolvedRegularExpressions(),
-                // Force consistency with the subscription when the subscription has changed.
                 bumpGroupEpoch,
                 toTopicPartitions(subscription.ownedPartitions(), metadataImage),
                 records
             );
         }
 
-        final JoinGroupResponseData response = new JoinGroupResponseData()
+        // 3. Downgrade the consumer group.
+        convertToClassicGroup(
+            group,
+            Set.of(),
+            updatedMember,
+            bumpGroupEpoch,
+            records
+        );
+        
+        return updatedMember;
+    }
+
+    /**
+     * Handles the no-downgrade scenario for join group.
+     */
+    private ConsumerGroupMember handleNoDowngradeScenario(
+        ConsumerGroup group,
+        String groupId,
+        int groupEpoch,
+        ConsumerGroupMember member,
+        ConsumerGroupMember updatedMember,
+        SubscriptionType subscriptionType,
+        boolean bumpGroupEpoch,
+        ConsumerProtocolSubscription subscription,
+        List<CoordinatorRecord> records
+    ) {
+        // 2. Update the target assignment if the group epoch is larger than the target assignment epoch.
+        // The delta between the existing and the new target assignment is persisted to the partition.
+        final int targetAssignmentEpoch;
+        final Assignment targetAssignment;
+
+        if (groupEpoch > group.assignmentEpoch()) {
+            targetAssignment = updateTargetAssignment(
+                group,
+                groupEpoch,
+                member,
+                updatedMember,
+                subscriptionType,
+                records
+            );
+            targetAssignmentEpoch = groupEpoch;
+        } else {
+            targetAssignmentEpoch = group.assignmentEpoch();
+            targetAssignment = group.targetAssignment(updatedMember.memberId(), updatedMember.instanceId());
+        }
+
+        // 3. Reconcile the member's assignment with the target assignment if the member is not fully reconciled yet.
+        return maybeReconcile(
+            groupId,
+            updatedMember,
+            group::currentPartitionEpoch,
+            targetAssignmentEpoch,
+            targetAssignment,
+            group.resolvedRegularExpressions(),
+            // Force consistency with the subscription when the subscription has changed.
+            bumpGroupEpoch,
+            toTopicPartitions(subscription.ownedPartitions(), metadataImage),
+            records
+        );
+    }
+
+    /**
+     * Builds the join group response.
+     */
+    private JoinGroupResponseData buildJoinGroupResponse(ConsumerGroupMember updatedMember) {
+        return new JoinGroupResponseData()
             .setMemberId(updatedMember.memberId())
             .setGenerationId(updatedMember.memberEpoch())
             .setProtocolType(ConsumerProtocol.PROTOCOL_TYPE)
             .setProtocolName(updatedMember.supportedClassicProtocols().get().iterator().next().name());
+    }
 
-        CompletableFuture<Void> appendFuture = new CompletableFuture<>();
+    /**
+     * Sets up the callback for append future completion.
+     */
+    private void setupAppendFutureCallback(
+        CompletableFuture<Void> appendFuture,
+        String groupId,
+        JoinGroupResponseData response,
+        int sessionTimeoutMs,
+        int rebalanceTimeoutMs,
+        boolean downgrade,
+        CompletableFuture<JoinGroupResponseData> responseFuture
+    ) {
         appendFuture.whenComplete((__, t) -> {
             if (t == null) {
                 cancelConsumerGroupJoinTimeout(groupId, response.memberId());
@@ -2663,17 +2817,11 @@ public class GroupMetadataManager {
                     // timeout for the joining member and the sync timeout to ensure
                     // that the member send sync request within the rebalance timeout.
                     scheduleConsumerGroupSessionTimeout(groupId, response.memberId(), sessionTimeoutMs);
-                    scheduleConsumerGroupSyncTimeout(groupId, response.memberId(), request.rebalanceTimeoutMs());
+                    scheduleConsumerGroupSyncTimeout(groupId, response.memberId(), rebalanceTimeoutMs);
                 }
                 responseFuture.complete(response);
             }
         });
-
-        // If the joining member triggers a valid downgrade, the soft states will be directly
-        // updated in the conversion method, so the records don't need to be replayed.
-        // If the joining member doesn't trigger a valid downgrade, the group is still a
-        // consumer group. We still rely on replaying records to update the soft states.
-        return new CoordinatorResult<>(records, null, appendFuture, !downgrade);
     }
 
     /**
