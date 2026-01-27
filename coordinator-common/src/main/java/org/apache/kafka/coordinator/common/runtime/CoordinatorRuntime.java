@@ -204,38 +204,9 @@ public class CoordinatorRuntime<S extends CoordinatorShard<U>, U> implements Aut
 
         @SuppressWarnings("checkstyle:CyclomaticComplexity")
         public CoordinatorRuntime<S, U> build() {
-            if (logPrefix == null)
-                logPrefix = "";
-            if (logContext == null)
-                logContext = new LogContext(logPrefix);
-            if (eventProcessor == null)
-                throw new IllegalArgumentException("Event processor must be set.");
-            if (partitionWriter == null)
-                throw new IllegalArgumentException("Partition write must be set.");
-            if (loader == null)
-                throw new IllegalArgumentException("Loader must be set.");
-            if (coordinatorShardBuilderSupplier == null)
-                throw new IllegalArgumentException("State machine supplier must be set.");
-            if (time == null)
-                throw new IllegalArgumentException("Time must be set.");
-            if (timer == null)
-                throw new IllegalArgumentException("Timer must be set.");
-            if (runtimeMetrics == null)
-                throw new IllegalArgumentException("CoordinatorRuntimeMetrics must be set.");
-            if (coordinatorMetrics == null)
-                throw new IllegalArgumentException("CoordinatorMetrics must be set.");
-            if (serializer == null)
-                throw new IllegalArgumentException("Serializer must be set.");
-            if (compression == null)
-                compression = Compression.NONE;
-            if (appendLingerMs == null)
-                appendLingerMs = OptionalInt.empty();
-            if (appendLingerMs.isPresent() && appendLingerMs.getAsInt() < 0)
-                throw new IllegalArgumentException("AppendLinger must be empty or >= 0");
-            if (executorService == null)
-                throw new IllegalArgumentException("ExecutorService must be set.");
-            if (cachedBufferMaxBytesSupplier == null)
-                throw new IllegalArgumentException("Cached buffer max bytes supplier must be set.");
+            initializeDefaults();
+            validateRequiredFields();
+            validateOptionalFields();
 
             return new CoordinatorRuntime<>(
                 logPrefix,
@@ -255,6 +226,47 @@ public class CoordinatorRuntime<S extends CoordinatorShard<U>, U> implements Aut
                 executorService,
                 cachedBufferMaxBytesSupplier
             );
+        }
+
+        private void initializeDefaults() {
+            if (logPrefix == null)
+                logPrefix = "";
+            if (logContext == null)
+                logContext = new LogContext(logPrefix);
+            if (compression == null)
+                compression = Compression.NONE;
+            if (appendLingerMs == null)
+                appendLingerMs = OptionalInt.empty();
+        }
+
+        private void validateRequiredFields() {
+            if (eventProcessor == null)
+                throw new IllegalArgumentException("Event processor must be set.");
+            if (partitionWriter == null)
+                throw new IllegalArgumentException("Partition write must be set.");
+            if (loader == null)
+                throw new IllegalArgumentException("Loader must be set.");
+            if (coordinatorShardBuilderSupplier == null)
+                throw new IllegalArgumentException("State machine supplier must be set.");
+            if (time == null)
+                throw new IllegalArgumentException("Time must be set.");
+            if (timer == null)
+                throw new IllegalArgumentException("Timer must be set.");
+            if (runtimeMetrics == null)
+                throw new IllegalArgumentException("CoordinatorRuntimeMetrics must be set.");
+            if (coordinatorMetrics == null)
+                throw new IllegalArgumentException("CoordinatorMetrics must be set.");
+            if (serializer == null)
+                throw new IllegalArgumentException("Serializer must be set.");
+            if (executorService == null)
+                throw new IllegalArgumentException("ExecutorService must be set.");
+            if (cachedBufferMaxBytesSupplier == null)
+                throw new IllegalArgumentException("Cached buffer max bytes supplier must be set.");
+        }
+
+        private void validateOptionalFields() {
+            if (appendLingerMs.isPresent() && appendLingerMs.getAsInt() < 0)
+                throw new IllegalArgumentException("AppendLinger must be empty or >= 0");
         }
     }
 
