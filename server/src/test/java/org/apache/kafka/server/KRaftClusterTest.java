@@ -716,6 +716,7 @@ public class KRaftClusterTest {
 
         @Override
         public void updateQuota(ClientQuotaType quotaType, org.apache.kafka.server.quota.ClientQuotaEntity quotaEntity, double newValue) {
+            // No-op: This is a dummy implementation for testing purposes
         }
 
         @Override
