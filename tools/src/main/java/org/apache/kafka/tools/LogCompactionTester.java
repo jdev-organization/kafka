@@ -201,7 +201,7 @@ public class LogCompactionTester {
                     return curr;
                 }
                 curr = next;
-                reader.readLine();
+                String consumedLine = reader.readLine();
             }
         }
 
