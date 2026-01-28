@@ -245,6 +245,7 @@ public class ShareConsumeBenchWorker implements TaskWorker {
                     Thread.sleep(60000);
                 } catch (InterruptedException e) {
                     log.debug("{} was interrupted. Closing...", this.getClass().getName());
+                    Thread.currentThread().interrupt();
                     break; // close the thread
                 }
             }
