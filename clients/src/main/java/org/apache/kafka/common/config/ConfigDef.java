@@ -83,7 +83,7 @@ import java.util.stream.Collectors;
  */
 public class ConfigDef {
 
-    private static final Pattern COMMA_WITH_WHITESPACE = Pattern.compile("\\s*,\\s*");
+    private static final Pattern COMMA_WITH_WHITESPACE = Pattern.compile("\\s*+,\\s*+");
     private static final Logger LOGGER = LoggerFactory.getLogger(ConfigDef.class);
     /**
      * A unique Java object which represents the lack of a default value.
