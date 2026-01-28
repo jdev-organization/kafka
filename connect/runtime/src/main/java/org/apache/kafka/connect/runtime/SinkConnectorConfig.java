@@ -153,11 +153,19 @@ public class SinkConnectorConfig extends ConnectorConfig {
                 }
             }
             if (hasTopicsRegexConfig) {
-                Pattern pattern = Pattern.compile(topicsRegex);
-                if (pattern.matcher(dlqTopic).matches()) {
+                try {
+                    Pattern pattern = Pattern.compile(topicsRegex);
+                    if (pattern.matcher(dlqTopic).matches()) {
+                        String errorMessage = String.format(
+                                "The DLQ topic '%s' may not be matched by the regex for the topics ('%s=%s') consumed by the connector",
+                                dlqTopic, TOPICS_REGEX_CONFIG, topicsRegex
+                        );
+                        addErrorMessage(validatedConfig, TOPICS_REGEX_CONFIG, topicsRegex, errorMessage);
+                    }
+                } catch (java.util.regex.PatternSyntaxException e) {
                     String errorMessage = String.format(
-                            "The DLQ topic '%s' may not be matched by the regex for the topics ('%s=%s') consumed by the connector",
-                            dlqTopic, TOPICS_REGEX_CONFIG, topicsRegex
+                            "Invalid regular expression for '%s': %s",
+                            TOPICS_REGEX_CONFIG, e.getMessage()
                     );
                     addErrorMessage(validatedConfig, TOPICS_REGEX_CONFIG, topicsRegex, errorMessage);
                 }
