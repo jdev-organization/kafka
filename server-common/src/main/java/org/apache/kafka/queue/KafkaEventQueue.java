@@ -293,6 +293,7 @@ public final class KafkaEventQueue implements EventQueue {
                                 (awaitNs == Long.MAX_VALUE) ? "new" : "deferred"
                         );
                         interrupted = true;
+                        Thread.currentThread().interrupt();
                     } finally {
                         long currentTimeMs = time.milliseconds();
                         idleTimeCallback.accept(Math.max(currentTimeMs - startIdleMs, 0), currentTimeMs);
