@@ -117,9 +117,9 @@ public class ClientMetricsCommand {
             String entityName = opts.hasGenerateNameOption() ? Uuid.randomUuid().toString() : opts.name().get();
 
             Map<String, String> configsToBeSet = new HashMap<>();
-            opts.interval().map(intervalVal -> configsToBeSet.put("interval.ms", intervalVal));
-            opts.metrics().map(metricslist -> configsToBeSet.put("metrics", String.join(",", metricslist)));
-            opts.match().map(matchlist -> configsToBeSet.put("match", String.join(",", matchlist)));
+            opts.interval().ifPresent(intervalVal -> configsToBeSet.put("interval.ms", intervalVal));
+            opts.metrics().ifPresent(metricslist -> configsToBeSet.put("metrics", String.join(",", metricslist)));
+            opts.match().ifPresent(matchlist -> configsToBeSet.put("match", String.join(",", matchlist)));
 
             ConfigResource configResource = new ConfigResource(ConfigResource.Type.CLIENT_METRICS, entityName);
             AlterConfigsOptions alterOptions = new AlterConfigsOptions().timeoutMs(30000).validateOnly(false);
