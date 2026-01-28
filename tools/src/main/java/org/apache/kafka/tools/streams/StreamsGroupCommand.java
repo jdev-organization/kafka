@@ -476,6 +476,9 @@ public class StreamsGroupCommand {
                 allTopicPartitions.keySet().removeIf(tp -> !sourceTopics.contains(tp.topic()));
                 return allTopicPartitions;
             } catch (InterruptedException | ExecutionException e) {
+                if (e instanceof InterruptedException) {
+                    Thread.currentThread().interrupt();
+                }
                 throw new RuntimeException(e);
             }
         }
