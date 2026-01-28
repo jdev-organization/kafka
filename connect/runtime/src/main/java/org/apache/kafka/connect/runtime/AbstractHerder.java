@@ -1277,7 +1277,9 @@ public abstract class AbstractHerder implements Herder, TaskStatus.Listener, Con
         String normalizedLevel = desiredLevelStr.toUpperCase(Locale.ROOT);
 
         if (!loggers.isValidLevel(normalizedLevel)) {
-            log.warn("Ignoring request to set invalid level '{}' for namespace {}", desiredLevelStr, namespace);
+            String sanitizedLevel = desiredLevelStr.replaceAll("[\n\r]", "_");
+            String sanitizedNamespace = namespace.replaceAll("[\n\r]", "_");
+            log.warn("Ignoring request to set invalid level '{}' for namespace {}", sanitizedLevel, sanitizedNamespace);
             return List.of();
         }
 
