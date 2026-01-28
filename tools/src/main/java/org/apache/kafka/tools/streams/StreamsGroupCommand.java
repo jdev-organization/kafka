@@ -123,6 +123,9 @@ public class StreamsGroupCommand {
         } catch (Throwable e) {
             printError("Executing streams group command failed due to " + e.getMessage(), Optional.of(e));
             exitCode = 1;
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
         }
 
         return exitCode;
