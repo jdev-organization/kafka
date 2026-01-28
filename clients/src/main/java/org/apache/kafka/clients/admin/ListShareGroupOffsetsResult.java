@@ -49,7 +49,12 @@ public class ListShareGroupOffsetsResult {
                 futures.forEach((groupId, future) -> {
                     try {
                         offsets.put(groupId, future.get());
-                    } catch (InterruptedException | ExecutionException e) {
+                    } catch (InterruptedException e) {
+                        // This should be unreachable, since the KafkaFuture#allOf already ensured
+                        // that all the futures completed successfully.
+                        Thread.currentThread().interrupt();
+                        throw new RuntimeException(e);
+                    } catch (ExecutionException e) {
                         // This should be unreachable, since the KafkaFuture#allOf already ensured
                         // that all the futures completed successfully.
                         throw new RuntimeException(e);
