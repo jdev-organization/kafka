@@ -184,7 +184,10 @@ public class ShareGroupCommand {
                     .timeoutMs(opts.options.valueOf(opts.timeoutMsOpt).intValue()));
                 Collection<GroupListing> listings = result.all().get();
                 return listings.stream().toList();
-            } catch (InterruptedException | ExecutionException e) {
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException(e);
+            } catch (ExecutionException e) {
                 throw new RuntimeException(e);
             }
         }
