@@ -84,7 +84,8 @@ def key_pass_id(key_id, passphrase):
     """
     Generates a deterministic identifier for the key and passphrase combination.
     """
-    h = hashlib.sha512()
-    h.update(key_id.encode())
-    h.update(passphrase.encode())
-    return h.hexdigest()
+    # Use PBKDF2 for secure password-based key derivation
+    # Using key_id as salt for deterministic output
+    salt = hashlib.sha256(key_id.encode()).digest()
+    h = hashlib.pbkdf2_hmac('sha256', passphrase.encode(), salt, 100000)
+    return h.hex()
