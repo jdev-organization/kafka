@@ -180,7 +180,7 @@ public abstract class Loggers {
             Objects.requireNonNull(level, "Level may not be null");
             String internalNameSpace = isValidRootLoggerName(namespace) ? LogManager.ROOT_LOGGER_NAME : namespace;
 
-            log.info("Setting level of namespace {} and children to {}", internalNameSpace, level);
+            log.info("Setting level of namespace {} and children to {}", internalNameSpace.replaceAll("[\\n\\r]", "_"), level.replaceAll("[\\n\\r]", "_"));
 
             var loggers = loggers(internalNameSpace);
             var nameToLevel = allLevels();
