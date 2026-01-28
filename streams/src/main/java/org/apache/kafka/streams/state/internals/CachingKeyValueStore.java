@@ -181,7 +181,7 @@ public class CachingKeyValueStore
 
         final Bytes key = keyQuery.getKey();
 
-        synchronized (mergedPosition) {
+        synchronized (position) {
             if (internalContext.cache() != null) {
                 final LRUCacheEntry lruCacheEntry = internalContext.cache().get(cacheName, key);
                 if (lruCacheEntry != null) {
