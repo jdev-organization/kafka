@@ -37,6 +37,72 @@ class KerberosRule {
      */
     private static final Pattern NON_SIMPLE_PATTERN = Pattern.compile("[/@]");
 
+    /**
+     * Validates and compiles a regex pattern from potentially untrusted input.
+     * This method helps prevent ReDoS (Regular Expression Denial of Service) attacks
+     * by validating the pattern before compilation.
+     * 
+     * @param pattern the pattern string to compile
+     * @param patternName the name of the pattern for error messages
+     * @return the compiled Pattern, or null if pattern is null
+     * @throws IllegalArgumentException if the pattern is invalid or potentially dangerous
+     */
+    private static Pattern compilePattern(String pattern, String patternName) {
+        if (pattern == null) {
+            return null;
+        }
+        
+        // Validate pattern length to prevent extremely long patterns
+        if (pattern.length() > 1000) {
+            throw new IllegalArgumentException(
+                "Pattern " + patternName + " is too long (max 1000 characters): " + pattern.length());
+        }
+        
+        // Check for potentially dangerous regex patterns that could cause ReDoS
+        validatePatternSafety(pattern, patternName);
+        
+        try {
+            return Pattern.compile(pattern);
+        } catch (java.util.regex.PatternSyntaxException e) {
+            throw new IllegalArgumentException(
+                "Invalid regular expression pattern in " + patternName + ": " + pattern, e);
+        }
+    }
+
+    /**
+     * Validates that a regex pattern doesn't contain constructs that are commonly
+     * associated with ReDoS (Regular Expression Denial of Service) vulnerabilities.
+     * 
+     * @param pattern the pattern to validate
+     * @param patternName the name of the pattern for error messages
+     * @throws IllegalArgumentException if the pattern contains dangerous constructs
+     */
+    private static void validatePatternSafety(String pattern, String patternName) {
+        // Check for nested quantifiers which are a common source of catastrophic backtracking
+        // Examples: (a+)+, (a*)*, (a+)*, (a?)+, etc.
+        if (Pattern.compile("\\([^)]*[*+?][^)]*\\)[*+?]").matcher(pattern).find()) {
+            throw new IllegalArgumentException(
+                "Pattern " + patternName + " contains nested quantifiers which may cause performance issues: " + pattern);
+        }
+        
+        // Check for excessive use of alternation with quantifiers
+        // Count the number of alternation operators and quantifiers
+        int alternationCount = 0;
+        int quantifierCount = 0;
+        for (int i = 0; i < pattern.length(); i++) {
+            char c = pattern.charAt(i);
+            if (c == '|') alternationCount++;
+            if (c == '*' || c == '+' || c == '?') quantifierCount++;
+        }
+        
+        // Reject patterns with excessive complexity
+        if (alternationCount > 20 || quantifierCount > 30) {
+            throw new IllegalArgumentException(
+                "Pattern " + patternName + " is too complex (alternations: " + alternationCount + 
+                ", quantifiers: " + quantifierCount + "): " + pattern);
+        }
+    }
+
     private final String defaultRealm;
     private final boolean isDefault;
     private final int numOfComponents;
@@ -67,9 +133,8 @@ class KerberosRule {
         isDefault = false;
         this.numOfComponents = numOfComponents;
         this.format = format;
-        this.match = match == null ? null : Pattern.compile(match);
-        this.fromPattern =
-                fromPattern == null ? null : Pattern.compile(fromPattern);
+        this.match = compilePattern(match, "match");
+        this.fromPattern = compilePattern(fromPattern, "fromPattern");
         this.toPattern = toPattern;
         this.repeat = repeat;
         this.toLowerCase = toLowerCase;
