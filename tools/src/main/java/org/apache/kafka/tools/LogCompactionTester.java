@@ -315,6 +315,9 @@ public class LogCompactionTester {
                     );
                     return pendingTopics.isEmpty();
                 } catch (InterruptedException | java.util.concurrent.ExecutionException e) {
+                    if (e instanceof InterruptedException) {
+                        Thread.currentThread().interrupt();
+                    }
                     throw new RuntimeException(e);
                 }
             }, () -> "timed out waiting for topics: " + pendingTopics);
