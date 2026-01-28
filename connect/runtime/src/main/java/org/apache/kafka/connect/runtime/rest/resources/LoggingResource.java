@@ -124,7 +124,7 @@ public class LoggingResource {
 
         switch (scope.toLowerCase(Locale.ROOT)) {
             default:
-                log.warn("Received invalid scope '{}' in request to adjust logging level; will default to {}", scope, WORKER_SCOPE);
+                log.warn("Received invalid scope '{}' in request to adjust logging level; will default to {}", scope.replaceAll("[\\n\\r]", "_"), WORKER_SCOPE);
             case WORKER_SCOPE:
                 List<String> affectedLoggers = herder.setWorkerLoggerLevel(namespace, levelString);
                 return Response.ok(affectedLoggers).build();
