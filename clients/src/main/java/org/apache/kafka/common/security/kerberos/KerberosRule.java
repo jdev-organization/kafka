@@ -67,13 +67,46 @@ class KerberosRule {
         isDefault = false;
         this.numOfComponents = numOfComponents;
         this.format = format;
-        this.match = match == null ? null : Pattern.compile(match);
+        this.match = match == null ? null : compilePattern(match);
         this.fromPattern =
-                fromPattern == null ? null : Pattern.compile(fromPattern);
+                fromPattern == null ? null : compilePattern(fromPattern);
         this.toPattern = toPattern;
         this.repeat = repeat;
         this.toLowerCase = toLowerCase;
         this.toUpperCase = toUpperCase;
+    }
+
+    /**
+     * Safely compile a regex pattern with validation to prevent regex injection attacks.
+     * This method validates the pattern before compilation to mitigate potential
+     * ReDoS (Regular Expression Denial of Service) attacks.
+     * 
+     * @param pattern the regex pattern string to compile
+     * @return the compiled Pattern object
+     * @throws IllegalArgumentException if the pattern is invalid or potentially malicious
+     */
+    private static Pattern compilePattern(String pattern) {
+        if (pattern == null) {
+            return null;
+        }
+        
+        // Validate pattern length to prevent extremely long patterns
+        if (pattern.length() > 1000) {
+            throw new IllegalArgumentException("Pattern is too long (max 1000 characters): " + pattern.length());
+        }
+        
+        // Check for potentially dangerous patterns that could cause catastrophic backtracking
+        // These are common ReDoS patterns
+        if (pattern.matches(".*\\([^)]*\\+[^)]*\\)[*+].*") || 
+            pattern.matches(".*\\([^)]*\\*[^)]*\\)[*+].*")) {
+            throw new IllegalArgumentException("Pattern contains potentially dangerous nested quantifiers that could cause ReDoS");
+        }
+        
+        try {
+            return Pattern.compile(pattern);
+        } catch (java.util.regex.PatternSyntaxException e) {
+            throw new IllegalArgumentException("Invalid regex pattern: " + pattern, e);
+        }
     }
 
     @Override
