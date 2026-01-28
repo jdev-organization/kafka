@@ -216,6 +216,9 @@ public class ShareConsumeBenchWorker implements TaskWorker {
                     }
                     startBatchMs = Time.SYSTEM.milliseconds();
                 }
+            } catch (InterruptedException e) {
+                WorkerUtils.abort(log, "ConsumeRecords", e, doneFuture);
+                Thread.currentThread().interrupt();
             } catch (Exception e) {
                 WorkerUtils.abort(log, "ConsumeRecords", e, doneFuture);
             } finally {
@@ -245,6 +248,7 @@ public class ShareConsumeBenchWorker implements TaskWorker {
                     Thread.sleep(60000);
                 } catch (InterruptedException e) {
                     log.debug("{} was interrupted. Closing...", this.getClass().getName());
+                    Thread.currentThread().interrupt();
                     break; // close the thread
                 }
             }
