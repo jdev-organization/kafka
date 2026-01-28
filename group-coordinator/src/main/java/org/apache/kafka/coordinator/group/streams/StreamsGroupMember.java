@@ -85,7 +85,7 @@ public record StreamsGroupMember(String memberId,
         private Integer memberEpoch = null;
         private Integer previousMemberEpoch = null;
         private MemberState state = null;
-        private Optional<String> instanceId = null;
+        private Optional<String> instanceId = Optional.empty();
         private Optional<String> rackId = null;
         private Integer rebalanceTimeoutMs = null;
         private String clientId = null;
