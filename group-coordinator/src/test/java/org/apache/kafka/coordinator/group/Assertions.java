@@ -106,8 +106,8 @@ public class Assertions {
         List<List<CoordinatorRecord>> expectedRecords,
         List<CoordinatorRecord> actualRecords
     ) {
+        int i = 0, j = 0;
         try {
-            int i = 0, j = 0;
             while (i < expectedRecords.size()) {
                 List<CoordinatorRecord> slice = expectedRecords.get(i);
                 assertRecordsEquals(
@@ -125,13 +125,14 @@ public class Assertions {
                 j += slice.size();
                 i++;
             }
-            assertEquals(j, actualRecords.size());
         } catch (AssertionFailedError e) {
             assertionFailure()
                 .expected(expectedRecords)
                 .actual(actualRecords)
                 .buildAndThrow();
         }
+        // Perform the final size check outside the try-catch to avoid catching its AssertionFailedError
+        assertEquals(j, actualRecords.size());
     }
 
     public static void assertRecordEquals(
