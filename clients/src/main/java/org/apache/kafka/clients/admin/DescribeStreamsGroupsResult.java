@@ -59,6 +59,9 @@ public class DescribeStreamsGroupsResult {
                     } catch (InterruptedException | ExecutionException e) {
                         // This should be unreachable, since the KafkaFuture#allOf already ensured
                         // that all of the futures completed successfully.
+                        if (e instanceof InterruptedException) {
+                            Thread.currentThread().interrupt();
+                        }
                         throw new RuntimeException(e);
                     }
                 });
