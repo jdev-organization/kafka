@@ -169,8 +169,9 @@ public class LogLoader {
                     long offset = LogFileUtils.offsetFromFile(file);
                     if (offset >= minSwapFileOffset && offset < maxSwapFileOffset) {
                         logger.info("Deleting segment files {} that is compacted but has not been deleted yet.", file.getName());
-                        @SuppressWarnings("UnusedLocalVariable")
-                        boolean ignore = file.delete();
+                        if (!file.delete()) {
+                            logger.warn("Failed to delete segment file {} that is compacted but has not been deleted yet.", file.getName());
+                        }
                     }
                 }
             } catch (StringIndexOutOfBoundsException | NumberFormatException e) {
