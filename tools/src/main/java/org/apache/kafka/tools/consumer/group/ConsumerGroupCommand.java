@@ -653,6 +653,7 @@ public class ConsumerGroupCommand {
                             result.put(groupId, Map.of());
                     }
                 } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
                     throw new RuntimeException(ie);
                 } catch (ExecutionException ee) {
                     if (ee.getCause() instanceof GroupIdNotFoundException) {
@@ -683,6 +684,7 @@ public class ConsumerGroupCommand {
 
                 return preparedOffsets;
             } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
                 throw new RuntimeException(ie);
             } catch (ExecutionException ee) {
                 Throwable cause = ee.getCause();
