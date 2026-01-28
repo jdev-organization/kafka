@@ -81,6 +81,11 @@ public class AclCommand {
             } else if (opts.options.has(opts.listOpt)) {
                 listAcls(admin, opts);
             }
+        } catch (InterruptedException e) {
+            System.out.println("Error while executing ACL command: " + e.getMessage());
+            System.out.println(Utils.stackTrace(e));
+            Thread.currentThread().interrupt();
+            Exit.exit(1);
         } catch (Throwable e) {
             System.out.println("Error while executing ACL command: " + e.getMessage());
             System.out.println(Utils.stackTrace(e));
