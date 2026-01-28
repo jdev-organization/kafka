@@ -113,6 +113,9 @@ public class ShareConsumerPerformance {
         } catch (Throwable e) {
             System.err.println(e.getMessage());
             System.err.println(Utils.stackTrace(e));
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
             Exit.exit(1);
         }
     }
