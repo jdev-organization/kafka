@@ -50,6 +50,10 @@ public class KerberosShortNamer {
     private static List<KerberosRule> parseRules(String defaultRealm, List<String> rules) {
         List<KerberosRule> result = new ArrayList<>();
         for (String rule : rules) {
+            // Prevent ReDoS attack by limiting input length
+            if (rule.length() > 1000) {
+                throw new IllegalArgumentException("Rule too long (max 1000 characters): " + rule.substring(0, 100) + "...");
+            }
             Matcher matcher = RULE_PARSER.matcher(rule);
             if (!matcher.lookingAt()) {
                 throw new IllegalArgumentException("Invalid rule: " + rule);
