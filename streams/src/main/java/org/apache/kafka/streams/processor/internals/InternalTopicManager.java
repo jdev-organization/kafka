@@ -195,11 +195,12 @@ public class InternalTopicManager {
                     );
                 }
                 
+                final HashSet<String> pendingTopics = new HashSet<String>();
+                pendingTopics.addAll(topicDescriptionsStillToValidate);
+                pendingTopics.addAll(topicConfigsStillToValidate);
+                
                 maybeThrowTimeout(new TimeoutContext(
-                        new HashSet<String>() {{
-                            addAll(topicDescriptionsStillToValidate);
-                            addAll(topicConfigsStillToValidate);
-                        }},
+                        pendingTopics,
                         deadline,
                         "Validation timeout",
                         String.format("Could not validate internal topics within %d milliseconds. " +
