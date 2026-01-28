@@ -484,6 +484,9 @@ public class OffsetsUtils {
 
             return topicPartitions.stream().filter(tp -> !existPartitions.contains(tp)).toList();
         } catch (InterruptedException | ExecutionException e) {
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
             throw new RuntimeException(e);
         }
     }
