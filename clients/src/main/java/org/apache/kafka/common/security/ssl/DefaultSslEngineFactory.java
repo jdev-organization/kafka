@@ -517,7 +517,7 @@ public class DefaultSslEngineFactory implements SslEngineFactory {
                 SecretKeyFactory keyFactory = SecretKeyFactory.getInstance(algorithm);
                 SecretKey pbeKey = keyFactory.generateSecret(new PBEKeySpec(keyPassword));
                 Cipher cipher = Cipher.getInstance(algorithm);
-                cipher.init(Cipher.DECRYPT_MODE, pbeKey, keyInfo.getAlgParameters());
+                cipher.init(Cipher.DECRYPT_MODE, pbeKey, keyInfo.getAlgParameters(), new SecureRandom());
                 keySpec = keyInfo.getKeySpec(cipher);
             }
 
