@@ -18,6 +18,7 @@ package org.apache.kafka.common.security.oauthbearer.internals.secured.assertion
 
 import org.apache.kafka.common.utils.Time;
 
+import java.security.SecureRandom;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -43,6 +44,7 @@ public class DynamicAssertionJwtTemplate implements AssertionJwtTemplate {
     private final int expSeconds;
     private final int nbfSeconds;
     private final boolean includeJti;
+    private final SecureRandom secureRandom;
 
     public DynamicAssertionJwtTemplate(Time time,
                                        String algorithm,
@@ -54,6 +56,7 @@ public class DynamicAssertionJwtTemplate implements AssertionJwtTemplate {
         this.expSeconds = expSeconds;
         this.nbfSeconds = nbfSeconds;
         this.includeJti = includeJti;
+        this.secureRandom = new SecureRandom();
     }
 
     @Override
@@ -74,8 +77,37 @@ public class DynamicAssertionJwtTemplate implements AssertionJwtTemplate {
         values.put("nbf", currentTimeSecs - nbfSeconds);
 
         if (includeJti)
-            values.put("jti", UUID.randomUUID().toString());
+            values.put("jti", generateSecureUUID());
 
         return Collections.unmodifiableMap(values);
+    }
+
+    /**
+     * Generates a cryptographically secure UUID using SecureRandom.
+     * This is more secure than UUID.randomUUID() which uses java.util.Random internally.
+     */
+    private String generateSecureUUID() {
+        byte[] randomBytes = new byte[16];
+        secureRandom.nextBytes(randomBytes);
+        
+        // Set version to 4 (random UUID)
+        randomBytes[6] &= 0x0f;
+        randomBytes[6] |= 0x40;
+        
+        // Set variant to RFC 4122
+        randomBytes[8] &= 0x3f;
+        randomBytes[8] |= 0x80;
+        
+        // Format as UUID string
+        long msb = 0;
+        long lsb = 0;
+        for (int i = 0; i < 8; i++) {
+            msb = (msb << 8) | (randomBytes[i] & 0xff);
+        }
+        for (int i = 8; i < 16; i++) {
+            lsb = (lsb << 8) | (randomBytes[i] & 0xff);
+        }
+        
+        return new UUID(msb, lsb).toString();
     }
 }
