@@ -634,8 +634,8 @@ public class LogCleaner implements BrokerReconfigurable {
                                 mb(stats.bytesRead) / (stats.elapsedSecs() - stats.elapsedIndexSecs()), 100 * (stats.elapsedSecs() - stats.elapsedIndexSecs()) / stats.elapsedSecs()) +
                         String.format("\tStart size: %,.1f MB (%,d messages)%n", mb(stats.bytesRead), stats.messagesRead) +
                         String.format("\tEnd size: %,.1f MB (%,d messages)%n", mb(stats.bytesWritten), stats.messagesWritten) +
-                        String.format("\t%.1f%% size reduction (%.1f%% fewer messages)%n", 100.0 * (1.0 - Long.valueOf(stats.bytesWritten).doubleValue() / stats.bytesRead),
-                                100.0 * (1.0 - Long.valueOf(stats.messagesWritten).doubleValue() / stats.messagesRead));
+                        String.format("\t%.1f%% size reduction (%.1f%% fewer messages)%n", 100.0 * (1.0 - (double) stats.bytesWritten / stats.bytesRead),
+                                100.0 * (1.0 - (double) stats.messagesWritten / stats.messagesRead));
             logger.info(message);
             if (lastPreCleanStats.delayedPartitions() > 0) {
                 logger.info("\tCleanable partitions: {}, Delayed partitions: {}, max delay: {}",
