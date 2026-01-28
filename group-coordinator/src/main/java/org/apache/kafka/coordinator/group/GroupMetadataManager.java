@@ -288,7 +288,7 @@ public class GroupMetadataManager {
         private CoordinatorMetadataImage metadataImage = null;
         private ShareGroupPartitionAssignor shareGroupAssignor = null;
         private GroupCoordinatorMetricsShard metrics;
-        private Optional<Plugin<Authorizer>> authorizerPlugin = null;
+        private Optional<Plugin<Authorizer>> authorizerPlugin = Optional.empty();
         private List<TaskAssignor> streamsGroupAssignors = null;
 
         Builder withLogContext(LogContext logContext) {
@@ -356,7 +356,6 @@ public class GroupMetadataManager {
             if (snapshotRegistry == null) snapshotRegistry = new SnapshotRegistry(logContext);
             if (metadataImage == null) metadataImage = CoordinatorMetadataImage.EMPTY;
             if (time == null) time = Time.SYSTEM;
-            if (authorizerPlugin == null) authorizerPlugin = Optional.empty();
 
             if (timer == null)
                 throw new IllegalArgumentException("Timer must be set.");
