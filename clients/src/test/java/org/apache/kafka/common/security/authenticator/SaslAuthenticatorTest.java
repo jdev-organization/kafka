@@ -1946,7 +1946,8 @@ public class SaslAuthenticatorTest {
 
             TestUtils.waitForCondition(() -> {
                 selector.poll(10L);
-                for (NetworkReceive receive : selector.completedReceives()) {
+                if (!selector.completedReceives().isEmpty()) {
+                    NetworkReceive receive = selector.completedReceives().get(0);
                     assertEquals(payload, new String(Utils.toArray(receive.payload()), StandardCharsets.UTF_8));
                     return true;
                 }
