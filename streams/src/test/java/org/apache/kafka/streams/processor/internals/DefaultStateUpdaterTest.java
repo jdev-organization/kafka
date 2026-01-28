@@ -1783,7 +1783,7 @@ class DefaultStateUpdaterTest {
 
         throwException.set(true);
         final ExecutionException exception = assertThrows(ExecutionException.class, () -> stateUpdater.remove(TASK_0_2).get());
-        assertEquals(processorStateException, exception.getCause());
+        assertSame(processorStateException, exception.getCause());
 
         stateUpdater.add(activeTask2);
         verifyUpdatingTasks(activeTask1, activeTask2);
