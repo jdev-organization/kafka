@@ -204,14 +204,11 @@ public class MockProcessorContext implements ProcessorContext, RecordCollector.S
      */
     @SuppressWarnings({"WeakerAccess", "unused"})
     public MockProcessorContext() {
-        //noinspection DoubleBraceInitialization
+        Properties properties = new Properties();
+        properties.put(StreamsConfig.APPLICATION_ID_CONFIG, "");
+        properties.put(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, "mock-localhost:9092");
         this(
-            new Properties() {
-                {
-                    put(StreamsConfig.APPLICATION_ID_CONFIG, "");
-                    put(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, "mock-localhost:9092");
-                }
-            },
+            properties,
             new TaskId(0, 0),
             null);
     }
