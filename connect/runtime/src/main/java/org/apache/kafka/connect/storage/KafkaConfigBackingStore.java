@@ -752,7 +752,10 @@ public final class KafkaConfigBackingStore extends KafkaTopicBasedBackingStore i
 
     @Override
     public void putLoggerLevel(String namespace, String level) {
-        log.debug("Writing level {} for logging namespace {} to Kafka", level, namespace);
+        // Sanitize user-controlled data to prevent log injection attacks
+        String sanitizedLevel = level != null ? level.replaceAll("[\n\r]", "_") : null;
+        String sanitizedNamespace = namespace != null ? namespace.replaceAll("[\n\r]", "_") : null;
+        log.debug("Writing level {} for logging namespace {} to Kafka", sanitizedLevel, sanitizedNamespace);
         Struct value = new Struct(LOGGER_LEVEL_V0);
         value.put("level", level);
         byte[] serializedValue = converter.fromConnectData(topic, value.schema(), value);
