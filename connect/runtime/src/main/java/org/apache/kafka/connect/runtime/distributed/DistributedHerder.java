@@ -1635,7 +1635,8 @@ public class DistributedHerder extends AbstractHerder implements Runnable {
 
     @Override
     protected void modifyConnectorOffsets(String connName, Map<Map<String, ?>, Map<String, ?>> offsets, Callback<Message> callback) {
-        log.trace("Submitting {} offsets request for connector '{}'", offsets == null ? "reset" : "alter", connName);
+        String sanitizedConnName = connName.replaceAll("[\\n\\r]", "_");
+        log.trace("Submitting {} offsets request for connector '{}'", offsets == null ? "reset" : "alter", sanitizedConnName);
 
         addRequest(() -> {
             if (!modifyConnectorOffsetsChecks(connName, callback)) {
@@ -1644,13 +1645,13 @@ public class DistributedHerder extends AbstractHerder implements Runnable {
             // At this point, we should be the leader (the call to modifyConnectorOffsetsChecks makes sure of that) and can safely run
             // a zombie fencing request
             if (isSourceConnector(connName) && config.exactlyOnceSourceEnabled()) {
-                log.debug("Performing a round of zombie fencing before modifying offsets for source connector {} with exactly-once support enabled.", connName);
+                log.debug("Performing a round of zombie fencing before modifying offsets for source connector {} with exactly-once support enabled.", sanitizedConnName);
                 doFenceZombieSourceTasks(connName, (error, ignored) -> {
                     if (error != null) {
                         log.error("Failed to perform zombie fencing for source connector prior to modifying offsets", error);
                         callback.onCompletion(new ConnectException("Failed to perform zombie fencing for source connector prior to modifying offsets", error), null);
                     } else {
-                        log.debug("Successfully completed zombie fencing for source connector {}; proceeding to modify offsets.", connName);
+                        log.debug("Successfully completed zombie fencing for source connector {}; proceeding to modify offsets.", sanitizedConnName);
                         // We need to ensure that we perform the necessary checks again before proceeding to actually altering / resetting the connector offsets since
                         // zombie fencing is done asynchronously and the conditions could have changed since the previous check
                         addRequest(() -> {
