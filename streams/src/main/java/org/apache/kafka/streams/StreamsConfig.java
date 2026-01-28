@@ -1974,25 +1974,29 @@ public class StreamsConfig extends AbstractConfig {
     }
 
     public static Set<String> verifyTopologyOptimizationConfigs(final String config) {
-        final List<String> configs = Arrays.asList(config.split("\\s*,\\s*"));
+        final List<String> configs = Arrays.asList(config.trim().split(","));
+        // Trim each element to remove leading/trailing whitespace
+        final List<String> trimmedConfigs = configs.stream()
+            .map(String::trim)
+            .collect(Collectors.toList());
         final Set<String> verifiedConfigs = new HashSet<>();
         // Verify it doesn't contain none or all plus a list of optimizations
-        if (configs.contains(NO_OPTIMIZATION) || configs.contains(OPTIMIZE)) {
-            if (configs.size() > 1) {
+        if (trimmedConfigs.contains(NO_OPTIMIZATION) || trimmedConfigs.contains(OPTIMIZE)) {
+            if (trimmedConfigs.size() > 1) {
                 throw new ConfigException("\"" + config + "\" is not a valid optimization config. " + CONFIG_ERROR_MSG);
             }
         }
-        for (final String conf: configs) {
+        for (final String conf: trimmedConfigs) {
             if (!TOPOLOGY_OPTIMIZATION_CONFIGS.contains(conf)) {
                 throw new ConfigException("Unrecognized config. " + CONFIG_ERROR_MSG);
             }
         }
-        if (configs.contains(OPTIMIZE)) {
+        if (trimmedConfigs.contains(OPTIMIZE)) {
             verifiedConfigs.add(REUSE_KTABLE_SOURCE_TOPICS);
             verifiedConfigs.add(MERGE_REPARTITION_TOPICS);
             verifiedConfigs.add(SINGLE_STORE_SELF_JOIN);
-        } else if (!configs.contains(NO_OPTIMIZATION)) {
-            verifiedConfigs.addAll(configs);
+        } else if (!trimmedConfigs.contains(NO_OPTIMIZATION)) {
+            verifiedConfigs.addAll(trimmedConfigs);
         }
         return verifiedConfigs;
     }
