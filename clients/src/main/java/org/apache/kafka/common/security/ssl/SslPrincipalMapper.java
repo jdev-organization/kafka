@@ -27,7 +27,7 @@ import static org.apache.kafka.common.config.internals.BrokerSecurityConfigs.DEF
 
 public class SslPrincipalMapper {
 
-    private static final String RULE_PATTERN = "(DEFAULT)|RULE:((\\\\.|[^\\\\/])*)/((\\\\.|[^\\\\/])*)/([LU]?).*?|(.*?)";
+    private static final String RULE_PATTERN = "(DEFAULT)|RULE:((\\\\.|[^\\\\/])++)/((\\\\.|[^\\\\/])++)/([LU]?)|(.*+)";
     private static final Pattern RULE_SPLITTER = Pattern.compile("\\s*(" + RULE_PATTERN + ")\\s*(,\\s*|$)");
     private static final Pattern RULE_PARSER = Pattern.compile(RULE_PATTERN);
 
