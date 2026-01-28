@@ -135,6 +135,8 @@ public abstract class Loggers {
         @Override
         public LoggerLevel level(String logger) {
             Objects.requireNonNull(logger, "Logger may not be null");
+            // Sanitize user-controlled input to prevent log injection
+            logger = logger.replaceAll("[\\n\\r]", "_");
 
             org.apache.logging.log4j.Logger foundLogger = null;
             if (isValidRootLoggerName(logger)) {
@@ -153,7 +155,7 @@ public abstract class Loggers {
             }
 
             if (foundLogger == null) {
-                log.warn("Unable to find level for logger {}", logger);
+                log.warn("Unable to find level for logger {}", logger.replaceAll("[\\n\\r]", "_"));
                 return null;
             }
 
@@ -180,7 +182,7 @@ public abstract class Loggers {
             Objects.requireNonNull(level, "Level may not be null");
             String internalNameSpace = isValidRootLoggerName(namespace) ? LogManager.ROOT_LOGGER_NAME : namespace;
 
-            log.info("Setting level of namespace {} and children to {}", internalNameSpace, level);
+            log.info("Setting level of namespace {} and children to {}", internalNameSpace.replaceAll("[\\n\\r]", "_"), level.replaceAll("[\\n\\r]", "_"));
 
             var loggers = loggers(internalNameSpace);
             var nameToLevel = allLevels();
