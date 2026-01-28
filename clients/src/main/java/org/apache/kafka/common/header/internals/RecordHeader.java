@@ -22,17 +22,18 @@ import org.apache.kafka.common.utils.Utils;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class RecordHeader implements Header {
     private ByteBuffer keyBuffer;
     private volatile String key;
     private volatile ByteBuffer valueBuffer;
-    private volatile byte[] value;
+    private AtomicReference<byte[]> value = new AtomicReference<>();
 
     public RecordHeader(String key, byte[] value) {
         Objects.requireNonNull(key, "Null header keys are not permitted");
         this.key = key;
-        this.value = value;
+        this.value.set(value);
     }
 
     public RecordHeader(ByteBuffer keyBuffer, ByteBuffer valueBuffer) {
@@ -53,15 +54,15 @@ public class RecordHeader implements Header {
     }
 
     public byte[] value() {
-        if (value == null && valueBuffer != null) {
+        if (value.get() == null && valueBuffer != null) {
             synchronized (this) {
-                if (value == null && valueBuffer != null) {
-                    value = Utils.toArray(valueBuffer);
+                if (value.get() == null && valueBuffer != null) {
+                    value.set(Utils.toArray(valueBuffer));
                     valueBuffer = null;
                 }
             }
         }
-        return value;
+        return value.get();
     }
 
     @Override
