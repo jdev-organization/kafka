@@ -1611,7 +1611,7 @@ public class AsyncKafkaConsumer<K, V> implements ConsumerDelegate<K, V> {
 
         Exception error = null;
 
-        if (streamsRebalanceListenerInvoker != null && streamsRebalanceListenerInvoker.isPresent()) {
+        if (streamsRebalanceListenerInvoker.isPresent()) {
 
             if (memberEpoch > 0) {
                 error = streamsRebalanceListenerInvoker.get().invokeAllTasksRevoked();
