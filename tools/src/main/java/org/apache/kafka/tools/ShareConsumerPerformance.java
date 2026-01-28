@@ -254,7 +254,7 @@ public class ShareConsumerPerformance {
         double totalMbRead = (bytesRead * 1.0) / (1024 * 1024);
         double intervalMbRead = ((bytesRead - lastBytesRead) * 1.0) / (1024 * 1024);
         double intervalMbPerSec = 1000.0 * intervalMbRead / elapsedMs;
-        double intervalRecordsPerSec = ((recordsRead - lastRecordsRead) / elapsedMs) * 1000.0;
+        double intervalRecordsPerSec = (((recordsRead - lastRecordsRead) * 1.0) / elapsedMs) * 1000.0;
         long fetchTimeMs = endMs - startMs;
 
         System.out.printf("%s, %s, %.4f, %.4f, %.4f, %d, %d for share consumer %d", dateFormat.format(startMs), dateFormat.format(endMs),
