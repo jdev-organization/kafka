@@ -18,6 +18,8 @@ package org.apache.kafka.common.network;
 
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
+import java.security.KeyStore;
+import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -25,6 +27,7 @@ import java.util.concurrent.TimeUnit;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.TrustManager;
+import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
 
 public final class SslSender extends Thread {
@@ -46,7 +49,10 @@ public final class SslSender extends Thread {
     public void run() {
         try {
             SSLContext sc = SSLContext.getInstance(tlsProtocol);
-            sc.init(null, new TrustManager[]{new NaiveTrustManager()}, new java.security.SecureRandom());
+            // Use the default trust manager which validates certificates properly
+            TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+            tmf.init((KeyStore) null);
+            sc.init(null, tmf.getTrustManagers(), new java.security.SecureRandom());
             try (SSLSocket connection = (SSLSocket) sc.getSocketFactory().createSocket(serverAddress.getAddress(), serverAddress.getPort())) {
                 OutputStream os = connection.getOutputStream();
                 connection.startHandshake();
@@ -61,25 +67,5 @@ public final class SslSender extends Thread {
 
     public boolean waitForHandshake(long timeoutMillis) throws InterruptedException {
         return handshaked.await(timeoutMillis, TimeUnit.MILLISECONDS);
-    }
-
-    /**
-     * blindly trust any certificate presented to it
-     */
-    private static class NaiveTrustManager implements X509TrustManager {
-        @Override
-        public void checkClientTrusted(X509Certificate[] x509Certificates, String s) {
-            //nop
-        }
-
-        @Override
-        public void checkServerTrusted(X509Certificate[] x509Certificates, String s) {
-            //nop
-        }
-
-        @Override
-        public X509Certificate[] getAcceptedIssuers() {
-            return new X509Certificate[0];
-        }
     }
 }
