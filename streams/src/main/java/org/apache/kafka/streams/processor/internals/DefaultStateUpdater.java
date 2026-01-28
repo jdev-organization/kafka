@@ -357,8 +357,9 @@ public class DefaultStateUpdater implements StateUpdater {
 
         private void handleStreamsException(final StreamsException streamsException) {
             log.info("Encountered streams exception: ", streamsException);
-            if (streamsException.taskId().isPresent()) {
-                handleStreamsExceptionWithTask(streamsException, streamsException.taskId().get());
+            final Optional<TaskId> taskId = streamsException.taskId();
+            if (taskId.isPresent()) {
+                handleStreamsExceptionWithTask(streamsException, taskId.get());
             } else {
                 handleStreamsExceptionWithoutTask(streamsException);
             }
