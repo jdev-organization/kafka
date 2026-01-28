@@ -252,8 +252,9 @@ public class AsyncKafkaConsumer<K, V> implements ConsumerDelegate<K, V> {
         private void processStreamsOnAllTasksLostCallbackNeededEvent(final StreamsOnAllTasksLostCallbackNeededEvent event) {
             StreamsOnAllTasksLostCallbackCompletedEvent invokedEvent = invokeOnAllTasksLostCallback(event.future());
             applicationEventHandler.add(invokedEvent);
-            if (invokedEvent.error().isPresent()) {
-                throw invokedEvent.error().get();
+            Optional<KafkaException> error = invokedEvent.error();
+            if (error.isPresent()) {
+                throw error.get();
             }
         }
 
