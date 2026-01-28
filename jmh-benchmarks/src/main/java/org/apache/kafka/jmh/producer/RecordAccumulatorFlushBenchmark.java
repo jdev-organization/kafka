@@ -70,7 +70,7 @@ public class RecordAccumulatorFlushBenchmark {
     private static final String TOPIC = "test";
     private static final int PARTITION = 0;
     private static final int BATCH_SIZE = 1024;
-    private static final long TOTAL_SIZE = 10 * 1024 * 1024;
+    private static final long TOTAL_SIZE = 10L * 1024 * 1024;
 
     @Param({"5000", "10000"})
     private int numRecords;
