@@ -441,7 +441,7 @@ public class StreamsGroup implements Group {
      * @param newMember The new member state.
      */
     private void updateStaticMember(StreamsGroupMember newMember) {
-        if (newMember.instanceId() != null && newMember.instanceId().isPresent()) {
+        if (newMember.instanceId().isPresent()) {
             staticMembers.put(newMember.instanceId().get(), newMember.memberId());
         }
     }
@@ -464,7 +464,7 @@ public class StreamsGroup implements Group {
      * @param oldMember The member to remove.
      */
     private void removeStaticMember(StreamsGroupMember oldMember) {
-        if (oldMember.instanceId() != null && oldMember.instanceId().isPresent()) {
+        if (oldMember.instanceId().isPresent()) {
             staticMembers.remove(oldMember.instanceId().get());
         }
     }
