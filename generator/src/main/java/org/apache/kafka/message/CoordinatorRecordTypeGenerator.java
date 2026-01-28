@@ -52,7 +52,8 @@ public class CoordinatorRecordTypeGenerator implements TypeClassGenerator {
     public void registerMessageType(MessageSpec spec) {
         switch (spec.type()) {
             case COORDINATOR_KEY: {
-                short id = spec.apiKey().get();
+                short id = spec.apiKey().orElseThrow(() -> 
+                    new RuntimeException("apiKey must be present for COORDINATOR_KEY type in " + spec.name()));
                 CoordinatorRecord record = records.computeIfAbsent(id, __ -> new CoordinatorRecord(id));
                 if (record.key != null) {
                     throw new RuntimeException("Duplicate coordinator record key for type " +
@@ -64,7 +65,8 @@ public class CoordinatorRecordTypeGenerator implements TypeClassGenerator {
             }
 
             case COORDINATOR_VALUE: {
-                short id = spec.apiKey().get();
+                short id = spec.apiKey().orElseThrow(() -> 
+                    new RuntimeException("apiKey must be present for COORDINATOR_VALUE type in " + spec.name()));
                 CoordinatorRecord record = records.computeIfAbsent(id, __ -> new CoordinatorRecord(id));
                 if (record.value != null) {
                     throw new RuntimeException("Duplicate coordinator record value for type " +
