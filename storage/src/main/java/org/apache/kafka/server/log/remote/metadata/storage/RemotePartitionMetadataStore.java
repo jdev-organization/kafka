@@ -131,6 +131,7 @@ public class RemotePartitionMetadataStore extends RemotePartitionMetadataEventHa
                     throw new ReplicaNotAvailableException("Remote log metadata cache is not initialized for partition: " + topicIdPartition);
                 }
             } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
                 throw new RemoteResourceNotFoundException("Couldn't initialize remote log metadata cache for partition: " + topicIdPartition);
             }
         }
