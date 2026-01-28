@@ -288,7 +288,7 @@ public class GroupMetadataManager {
         private CoordinatorMetadataImage metadataImage = null;
         private ShareGroupPartitionAssignor shareGroupAssignor = null;
         private GroupCoordinatorMetricsShard metrics;
-        private Optional<Plugin<Authorizer>> authorizerPlugin = null;
+        private Optional<Plugin<Authorizer>> authorizerPlugin = Optional.empty();
         private List<TaskAssignor> streamsGroupAssignors = null;
 
         Builder withLogContext(LogContext logContext) {
