@@ -120,10 +120,41 @@ public class SslPrincipalMapper {
 
         Rule(String pattern, String replacement, boolean toLowerCase, boolean toUpperCase) {
             isDefault = false;
-            this.pattern = pattern == null ? null : Pattern.compile(pattern);
+            this.pattern = pattern == null ? null : compilePattern(pattern);
             this.replacement = replacement;
             this.toLowerCase = toLowerCase;
             this.toUpperCase = toUpperCase;
+        }
+
+        private static Pattern compilePattern(String pattern) {
+            if (pattern == null) {
+                return null;
+            }
+            
+            // Validate pattern to prevent ReDoS attacks
+            validatePattern(pattern);
+            
+            try {
+                return Pattern.compile(pattern);
+            } catch (Exception e) {
+                throw new IllegalArgumentException("Invalid regex pattern: " + pattern, e);
+            }
+        }
+
+        private static void validatePattern(String pattern) {
+            // Check for patterns that could cause catastrophic backtracking (ReDoS)
+            // Reject patterns with nested quantifiers which are common ReDoS patterns
+            if (pattern.matches(".*[*+]{2,}.*") || 
+                pattern.matches(".*\\([^)]*[*+][^)]*\\)[*+].*")) {
+                throw new IllegalArgumentException(
+                    "Pattern contains nested quantifiers that could cause performance issues: " + pattern);
+            }
+            
+            // Limit pattern length to prevent extremely complex patterns
+            if (pattern.length() > 1000) {
+                throw new IllegalArgumentException(
+                    "Pattern is too long (max 1000 characters): " + pattern.length());
+            }
         }
 
         String apply(String distinguishedName) {
@@ -135,7 +166,7 @@ public class SslPrincipalMapper {
             final Matcher m = pattern.matcher(distinguishedName);
 
             if (m.matches()) {
-                result = distinguishedName.replaceAll(pattern.pattern(), escapeLiteralBackReferences(replacement, m.groupCount()));
+                result = m.replaceAll(escapeLiteralBackReferences(replacement, m.groupCount()));
             }
 
             if (toLowerCase && result != null) {
