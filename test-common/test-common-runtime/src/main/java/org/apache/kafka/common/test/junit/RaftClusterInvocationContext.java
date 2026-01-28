@@ -206,6 +206,9 @@ public class RaftClusterInvocationContext implements TestTemplateInvocationConte
                             ), "Broker never made it to RUNNING state.");
                 }
             } catch (Exception e) {
+                if (e instanceof InterruptedException) {
+                    Thread.currentThread().interrupt();
+                }
                 throw new RuntimeException("Failed to start Raft server", e);
             }
         }
