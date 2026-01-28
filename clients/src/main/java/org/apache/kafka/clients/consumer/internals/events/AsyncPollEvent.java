@@ -25,6 +25,7 @@ import org.apache.kafka.common.utils.Time;
 
 import java.time.Duration;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * This class represents the non-blocking event that executes logic functionally equivalent to the following:
@@ -44,7 +45,7 @@ public class AsyncPollEvent extends ApplicationEvent implements MetadataErrorNot
 
     private final long deadlineMs;
     private final long pollTimeMs;
-    private volatile KafkaException error;
+    private final AtomicReference<KafkaException> error = new AtomicReference<>();
     private volatile boolean isComplete;
     private volatile boolean isValidatePositionsComplete;
 
@@ -70,7 +71,7 @@ public class AsyncPollEvent extends ApplicationEvent implements MetadataErrorNot
     }
 
     public Optional<KafkaException> error() {
-        return Optional.ofNullable(error);
+        return Optional.ofNullable(error.get());
     }
 
     public boolean isExpired(Time time) {
@@ -94,7 +95,7 @@ public class AsyncPollEvent extends ApplicationEvent implements MetadataErrorNot
     }
 
     public void completeExceptionally(KafkaException e) {
-        error = e;
+        error.set(e);
         isComplete = true;
     }
 
@@ -108,7 +109,7 @@ public class AsyncPollEvent extends ApplicationEvent implements MetadataErrorNot
         return super.toStringBase() +
             ", deadlineMs=" + deadlineMs +
             ", pollTimeMs=" + pollTimeMs +
-            ", error=" + error +
+            ", error=" + error.get() +
             ", isComplete=" + isComplete +
             ", isValidatePositionsComplete=" + isValidatePositionsComplete;
     }
