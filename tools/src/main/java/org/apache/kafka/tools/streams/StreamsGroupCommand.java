@@ -885,6 +885,9 @@ public class StreamsGroupCommand {
                     } catch (InterruptedException | ExecutionException ex) {
                         printError("Retrieving internal topics is not supported by the broker version. " +
                             "Use 'kafka-topics.sh' to list and delete the group's internal topics.", Optional.of(e.getCause()));
+                        if (ex instanceof InterruptedException) {
+                            Thread.currentThread().interrupt();
+                        }
                     }
                 } else {
                     printError("Retrieving internal topics failed due to " + e.getMessage(), Optional.of(e));
