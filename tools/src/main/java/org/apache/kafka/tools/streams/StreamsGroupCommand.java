@@ -620,6 +620,9 @@ public class StreamsGroupCommand {
             try {
                 deleteResult.all().get();
             } catch (ExecutionException | InterruptedException e) {
+                if (e instanceof InterruptedException) {
+                    Thread.currentThread().interrupt();
+                }
                 topLevelException = Errors.forException(e.getCause());
             }
 
