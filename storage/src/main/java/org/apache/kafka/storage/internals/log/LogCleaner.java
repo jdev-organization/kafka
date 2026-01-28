@@ -224,6 +224,7 @@ public class LogCleaner implements BrokerReconfigurable {
             try {
                 thread.shutdown();
             } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
                 throw new RuntimeException(e);
             }
         });
