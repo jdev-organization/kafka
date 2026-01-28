@@ -85,14 +85,14 @@ public record StreamsGroupMember(String memberId,
         private Integer memberEpoch = null;
         private Integer previousMemberEpoch = null;
         private MemberState state = null;
-        private Optional<String> instanceId = null;
-        private Optional<String> rackId = null;
+        private Optional<String> instanceId = Optional.empty();
+        private Optional<String> rackId = Optional.empty();
         private Integer rebalanceTimeoutMs = null;
         private String clientId = null;
         private String clientHost = null;
         private Integer topologyEpoch = null;
         private String processId = null;
-        private Optional<StreamsGroupMemberMetadataValue.Endpoint> userEndpoint = null;
+        private Optional<StreamsGroupMemberMetadataValue.Endpoint> userEndpoint = Optional.empty();
         private Map<String, String> clientTags = null;
         private TasksTupleWithEpochs assignedTasks = null;
         private TasksTupleWithEpochs tasksPendingRevocation = null;
