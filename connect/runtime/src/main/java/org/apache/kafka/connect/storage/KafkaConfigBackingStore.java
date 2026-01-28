@@ -854,6 +854,28 @@ public final class KafkaConfigBackingStore extends KafkaTopicBasedBackingStore i
     }
 
     private record ProducerKeyValue(String key, byte[] value) {
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            ProducerKeyValue that = (ProducerKeyValue) o;
+            return Objects.equals(key, that.key) && Arrays.equals(value, that.value);
+        }
+
+        @Override
+        public int hashCode() {
+            int result = Objects.hash(key);
+            result = 31 * result + Arrays.hashCode(value);
+            return result;
+        }
+
+        @Override
+        public String toString() {
+            return "ProducerKeyValue{" +
+                    "key='" + key + '\'' +
+                    ", value=" + Arrays.toString(value) +
+                    '}';
+        }
     }
 
     private void relinquishWritePrivileges() {
